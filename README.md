@@ -32,7 +32,12 @@ Ele faz todo o trabalho pesado para você:
 Aqui está um exemplo real do processamento automático do Clip Engine:
 
 <!-- BEGIN YOUTUBE-CARDS -->
-
+[![COMO A IA MOVIMENTA BILHÕES E VOCÊ NEM IMAGINA](https://ytcards.demolab.com/?id=VzWNptoU3bY&title=COMO+A+IA+MOVIMENTA+BILH%C3%95ES+E+VOC%C3%8A+NEM+IMAGINA&lang=en&timestamp=1773201238&background_color=%230d1117&title_color=%23ffffff&stats_color=%23dedede&max_title_lines=1&width=250&border_radius=5 "COMO A IA MOVIMENTA BILHÕES E VOCÊ NEM IMAGINA")](https://www.youtube.com/shorts/VzWNptoU3bY)
+[![A Loirinha Da Odonto Tá Na Maldade ( Nobru vlogs )](https://ytcards.demolab.com/?id=x-rsuYYfk0Y&title=A+Loirinha+Da+Odonto+T%C3%A1+Na+Maldade+%28+Nobru+vlogs+%29&lang=en&timestamp=1773153906&background_color=%230d1117&title_color=%23ffffff&stats_color=%23dedede&max_title_lines=1&width=250&border_radius=5 "A Loirinha Da Odonto Tá Na Maldade ( Nobru vlogs )")](https://www.youtube.com/shorts/x-rsuYYfk0Y)
+[![PROGRAMADOR APOSENTADO CRIA ALGO INCRÍVEL](https://ytcards.demolab.com/?id=OU_kph4x3ac&title=PROGRAMADOR+APOSENTADO+CRIA+ALGO+INCR%C3%8DVEL&lang=en&timestamp=1773100613&background_color=%230d1117&title_color=%23ffffff&stats_color=%23dedede&max_title_lines=1&width=250&border_radius=5 "PROGRAMADOR APOSENTADO CRIA ALGO INCRÍVEL")](https://www.youtube.com/shorts/OU_kph4x3ac)
+[![Estoura o balão e enconte seu amor PT 1](https://ytcards.demolab.com/?id=Yv2T95K55R4&title=Estoura+o+bal%C3%A3o+e+enconte+seu+amor+PT+1&lang=en&timestamp=1773093308&background_color=%230d1117&title_color=%23ffffff&stats_color=%23dedede&max_title_lines=1&width=250&border_radius=5 "Estoura o balão e enconte seu amor PT 1")](https://www.youtube.com/shorts/Yv2T95K55R4)
+[![2026 SERA O ANO DA VERDADE ( VIDA INTELIGENTE FORA DO PLANETA)](https://ytcards.demolab.com/?id=yugnmW3pvxs&title=2026+SERA+O+ANO+DA+VERDADE+%28+VIDA+INTELIGENTE+FORA+DO+PLANETA%29&lang=en&timestamp=1773069900&background_color=%230d1117&title_color=%23ffffff&stats_color=%23dedede&max_title_lines=1&width=250&border_radius=5 "2026 SERA O ANO DA VERDADE ( VIDA INTELIGENTE FORA DO PLANETA)")](https://www.youtube.com/shorts/yugnmW3pvxs)
+[![F STEAM ?](https://ytcards.demolab.com/?id=UCUj-OhFuG4&title=F+STEAM+%3F&lang=en&timestamp=1773067508&background_color=%230d1117&title_color=%23ffffff&stats_color=%23dedede&max_title_lines=1&width=250&border_radius=5 "F STEAM ?")](https://www.youtube.com/shorts/UCUj-OhFuG4)
 <!-- END YOUTUBE-CARDS -->
 
 Nota: Se o vídeo não carregar acima, você pode visualizá-lo diretamente na pasta processed_videos/final_clips/.
