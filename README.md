@@ -31,12 +31,8 @@ Ele faz todo o trabalho pesado para você:
 
 Aqui está um exemplo real do processamento automático do Clip Engine:
 
-<div align="center">
-<video src="https://www.google.com/search?q=processed_videos/final_clips/exemple.mp4" width="320" controls muted>
-Seu navegador não suporta a tag de vídeo.
-</video>
-<p><i>Preview: Zoom automático + Legendas dinâmicas + Memes contextuais</i></p>
-</div>
+<!-- BEGIN YOUTUBE-CARDS -->
+<!-- END YOUTUBE-CARDS -->
 
 Nota: Se o vídeo não carregar acima, você pode visualizá-lo diretamente na pasta processed_videos/final_clips/.
 
