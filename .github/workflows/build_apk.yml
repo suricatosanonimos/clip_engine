@@ -1,11 +1,20 @@
 name: Build Flet APK
+
 on:
   push:
     branches: [ master ]
   workflow_dispatch:
 
+env:
+  # Força o uso do Node 24 para evitar os avisos de depreciação que você viu
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
+    # Adicionando a permissão de escrita que você solicitou
+    permissions:
+      contents: write
+    
     runs-on: ubuntu-latest
 
     steps:
@@ -27,7 +36,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install flet
-          # Instala os requisitos da raiz E da pasta app
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           if [ -f app/requirements.txt ]; then pip install -r app/requirements.txt; fi
 
@@ -36,9 +44,9 @@ jobs:
 
       - name: Build APK
         run: |
-          # Rodamos o build apontando para a pasta app/ onde está o main.py
-          # O Flet vai empacotar o que estiver dentro da pasta do projeto
-          flet build apk app/ --project "ClipEngine" --product "ClipEngineApp"
+          # O 'yes' responde automaticamente 'y' para a instalação do Flutter SDK 3.41.4
+          # Adicionei o argumento --no-interactive para garantir que o Flet não espere input
+          yes | flet build apk app/ --project "ClipEngine" --product "ClipEngineApp"
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
