@@ -1,15 +1,22 @@
 """
 Aba 1 — Novo Projeto.
-Cole a URL do YouTube e dispare o pipeline de análise.
+Versão atual: consome a API FastAPI via HTTP.
+Próxima etapa: integrar upload para Supabase Storage.
 """
 
 import threading
 import time
+from pathlib import Path
 
 import flet as ft
+import httpx
+
 from src.views.components import clip_card, tag
 from src.views.models import ClipSugerido
 from src.views.theme import C
+
+API_BASE_URL    = "http://127.0.0.1:8000"
+REQUEST_TIMEOUT = 30
 
 
 def build_aba_novo_projeto(estado: dict, page: ft.Page) -> ft.Control:
@@ -28,21 +35,49 @@ def build_aba_novo_projeto(estado: dict, page: ft.Page) -> ft.Control:
         expand=True,
     )
 
-    status_text = ft.Text("", size=12, color=C.TEXT_SECONDARY)
-    progress_row = ft.ProgressBar(
-        value=0,
-        color=C.ACCENT,
-        bgcolor=C.BORDER,
-        height=3,
-        border_radius=3,
-        visible=False,
+    status_text   = ft.Text("", size=12, color=C.TEXT_SECONDARY)
+    progress_row  = ft.ProgressBar(
+        value=0, color=C.ACCENT, bgcolor=C.BORDER,
+        height=3, border_radius=3, visible=False,
     )
-    clips_column = ft.Column(spacing=10, visible=False)
+    clips_column  = ft.Column(spacing=10, visible=False)
     etapas_column = ft.Column(spacing=4)
 
-    # ──────────────────────────────────────────────────────────────
-    #  ETAPAS DO PIPELINE
-    # ──────────────────────────────────────────────────────────────
+    _STATUS_ETAPA = {
+        "pending":      0,
+        "downloading":  0,
+        "processing":   1,
+        "transcribing": 2,
+        "analyzing":    2,
+        "done":         3,
+        "error":        3,
+    }
+
+    # ── Notificação ────────────────────────────────────────────────
+
+    def _notificar(mensagem: str, cor: str = C.SUCCESS, duracao: int = 6000):
+        icone = (
+            ft.Icons.CHECK_CIRCLE if cor == C.SUCCESS
+            else ft.Icons.INFO    if cor == C.CYAN
+            else ft.Icons.ERROR
+        )
+        page.snack_bar = ft.SnackBar(
+            content=ft.Row(
+                spacing=10,
+                controls=[
+                    ft.Icon(icone, color=cor, size=18),
+                    ft.Text(mensagem, color=C.TEXT_PRIMARY, size=13, expand=True),
+                ],
+            ),
+            bgcolor=C.SURFACE_2,
+            duration=duracao,
+            show_close_icon=True,
+            close_icon_color=C.TEXT_SECONDARY,
+        )
+        page.snack_bar.open = True
+        page.update()
+
+    # ── Etapas visuais ─────────────────────────────────────────────
 
     def atualizar_etapas(etapa_atual: int):
         etapas = [
@@ -62,156 +97,249 @@ def build_aba_novo_projeto(estado: dict, page: ft.Page) -> ft.Control:
 
             controles.append(
                 ft.Row(
-                    [
+                    spacing=8,
+                    controls=[
                         ft.Icon(ic, size=16, color=cor),
                         ft.Text(
-                            label,
-                            size=12,
-                            color=cor,
+                            label, size=12, color=cor,
                             weight=(
-                                ft.FontWeight.W_600
-                                if i == etapa_atual
+                                ft.FontWeight.W_600 if i == etapa_atual
                                 else ft.FontWeight.NORMAL
                             ),
                         ),
                     ],
-                    spacing=8,
                 )
             )
             if i < len(etapas) - 1:
                 controles.append(
                     ft.Container(
-                        width=1,
-                        height=12,
-                        bgcolor=C.BORDER,
-                        margin=ft.margin.only(left=7),
+                        width=1, height=12, bgcolor=C.BORDER,
+                        margin=ft.Margin(left=7, right=0, top=0, bottom=0),
                     )
                 )
         etapas_column.controls = controles
         page.update()
 
-    # ──────────────────────────────────────────────────────────────
-    #  PIPELINE (fake — substitua pelas chamadas reais ao back-end)
-    # ──────────────────────────────────────────────────────────────
+    # ── Helpers UI ─────────────────────────────────────────────────
 
-    def simular_pipeline(origem: str):
-        """
-        Simula o pipeline completo.
-        `origem` pode ser uma URL do YouTube ou o caminho de um arquivo local.
-        Substitua cada bloco pela chamada real ao seu back-end.
-        """
-        # ETAPA 0 — Download / leitura do arquivo
-        atualizar_etapas(0)
-        status_text.value = (
-            "Baixando vídeo..." if origem.startswith("http") else "Lendo arquivo..."
-        )
-        progress_row.visible = True
-        for p in range(0, 101, 5):
-            progress_row.value = p / 100
-            page.update()
-            time.sleep(0.06)
-        # download_video(origem)  ←  substitua aqui
-        pass
-
-        # ETAPA 1 — Transcrição
-        atualizar_etapas(1)
-        status_text.value = "Transcrevendo com Whisper..."
-        progress_row.value = 0
-        for p in range(0, 101, 3):
-            progress_row.value = p / 100
-            page.update()
-            time.sleep(0.08)
-        # transcrever()  ←  substitua aqui
-        pass
-
-        # ETAPA 2 — Análise de IA
-        atualizar_etapas(2)
-        status_text.value = "Analisando momentos virais com IA..."
-        progress_row.value = 0
-        for p in range(0, 101, 4):
-            progress_row.value = p / 100
-            page.update()
-            time.sleep(0.07)
-        # clipes_brutos = analisar_momentos()  ←  substitua aqui
-        pass
-
-        # ETAPA 3 — Geração dos cards
-        atualizar_etapas(3)
-        status_text.value = "Gerando sugestões de clipes..."
-        progress_row.value = 0.9
+    def _set_erro(mensagem: str):
+        status_text.value     = f"✗ {mensagem}"
+        status_text.color     = C.ERROR
+        progress_row.visible  = False
+        btn_download.disabled = False
+        btn_gallery.disabled  = False
         page.update()
-        time.sleep(0.4)
+        _notificar(f"Erro: {mensagem[:80]}", cor=C.ERROR, duracao=8000)
 
-        clipes_mock = [
-            ClipSugerido(
-                1,
-                "Momento de climax narrativo incrível",
-                "02:14", "03:41", "1m27s",
-                0.92,
-                "Pico emocional detectado + variação de tom + palavras-gatilho de engajamento",
-            ),
-            ClipSugerido(
-                2,
-                "Revelação surpreendente no diálogo",
-                "07:05", "08:10", "1m05s",
-                0.78,
-                "Alta densidade de palavras de alto impacto + pausa dramática detectada",
-            ),
-            ClipSugerido(
-                3,
-                "Introdução energética e direta",
-                "00:00", "00:48", "48s",
-                0.65,
-                "Abertura com hook forte — potencial para retenção nos primeiros 3 segundos",
-            ),
-            ClipSugerido(
-                4,
-                "Trecho com insight técnico valioso",
-                "12:33", "13:55", "1m22s",
-                0.51,
-                "Conteúdo informativo denso — desempenho histórico moderado em reels",
-            ),
-        ]
+    def _set_sucesso(mensagem: str):
+        status_text.value  = mensagem
+        status_text.color  = C.SUCCESS
+        progress_row.value = 1.0
+        page.update()
+
+    def _popular_cards(clips_api: list):
+        if not clips_api:
+            _set_erro("Nenhum clipe foi gerado. Verifique o vídeo e tente novamente.")
+            return
+
+        clipes = []
+        for item in clips_api:
+            clipe = ClipSugerido(
+                id=item.get("index", len(clipes) + 1),
+                titulo=Path(item["filename"]).stem.replace("_", " ").title(),
+                inicio="--:--",
+                fim="--:--",
+                duracao="~60s",
+                score=0.0,
+                motivo=f"Clipe gerado automaticamente. ({item.get('size_mb', 0):.1f} MB)",
+                status="pronto",
+                progresso=1.0,
+            )
+            estado["clipes"][clipe.id] = clipe
+            clipes.append(clipe)
 
         clips_column.controls.clear()
         clips_column.controls.append(
             ft.Row(
-                [
-                    ft.Icon(ft.Icons.AUTO_AWESOME, color=C.ACCENT, size=16),
+                vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                controls=[
+                    ft.Icon(ft.Icons.MOVIE_FILTER, color=C.ACCENT, size=16),
                     ft.Text(
-                        f"{len(clipes_mock)} clipes sugeridos pela IA",
-                        size=14,
-                        weight=ft.FontWeight.W_700,
-                        color=C.TEXT_PRIMARY,
+                        f"{len(clipes)} clipes gerados",
+                        size=14, weight=ft.FontWeight.W_700, color=C.TEXT_PRIMARY,
                     ),
                     ft.Container(expand=True),
-                    tag(
-                        f"Score médio: {int(sum(c.score for c in clipes_mock) / len(clipes_mock) * 100)}%",
-                        C.CYAN,
-                        C.CYAN_SOFT,
-                    ),
+                    tag(f"{len(clipes)} clipes", C.CYAN, C.CYAN_SOFT),
                 ],
-                vertical_alignment=ft.CrossAxisAlignment.CENTER,
             )
         )
-        for clipe in clipes_mock:
-            estado["clipes"][clipe.id] = clipe
+        for clipe in clipes:
             clips_column.controls.append(
                 clip_card(clipe, on_renderizar_clipe, on_preview_clipe)
             )
 
         clips_column.visible = True
-        progress_row.value   = 1.0
-        status_text.value    = "✓ Análise concluída! Selecione os clipes para renderizar."
-        status_text.color    = C.SUCCESS
-        page.update()
+        _set_sucesso(f"✓ {len(clipes)} clipes prontos!")
+        _notificar(
+            f"✅ Concluído! {len(clipes)} clipes prontos na galeria.",
+            cor=C.SUCCESS, duracao=8000,
+        )
 
-    # ──────────────────────────────────────────────────────────────
-    #  HANDLERS DE ENTRADA
-    # ──────────────────────────────────────────────────────────────
+    # ── Polling ────────────────────────────────────────────────────
+
+    def _proximo_intervalo(elapsed: float) -> float:
+        if elapsed < 120:   return 5.0
+        elif elapsed < 300: return 10.0
+        else:               return 15.0
+
+    def _aguardar_task(task_id: str):
+        elapsed   = 0.0
+        intervalo = 5.0
+
+        with httpx.Client(
+            base_url=API_BASE_URL,
+            timeout=httpx.Timeout(connect=10, read=30, write=10, pool=10),
+        ) as client:
+            while True:
+                try:
+                    resp = client.get(f"/api/status/{task_id}")
+                    resp.raise_for_status()
+                    data = resp.json()
+                except httpx.ConnectError:
+                    _set_erro("Conexão com a API perdida. Verifique se está rodando.")
+                    return
+                except httpx.TimeoutException:
+                    time.sleep(intervalo)
+                    elapsed  += intervalo
+                    intervalo = _proximo_intervalo(elapsed)
+                    continue
+                except Exception as e:
+                    _set_erro(f"Erro ao consultar status: {e}")
+                    return
+
+                api_status = data.get("status", "pending")
+                progresso  = float(data.get("progress", 0.0))
+                mensagem   = data.get("message", "")
+
+                atualizar_etapas(_STATUS_ETAPA.get(api_status, 0))
+                progress_row.value = progresso
+                status_text.value  = mensagem
+                status_text.color  = C.ERROR if api_status == "error" else C.TEXT_SECONDARY
+                page.update()
+
+                if api_status == "done":
+                    _popular_cards(data.get("clips", []))
+                    btn_download.disabled = False
+                    btn_gallery.disabled  = False
+                    return
+
+                if api_status == "error":
+                    _set_erro(data.get("error") or mensagem or "Erro desconhecido na API.")
+                    return
+
+                intervalo = _proximo_intervalo(elapsed)
+                time.sleep(intervalo)
+                elapsed += intervalo
+
+    # ── Pipeline YouTube ───────────────────────────────────────────
+
+    def _pipeline_youtube(url: str):
+        try:
+            with httpx.Client(
+                base_url=API_BASE_URL,
+                timeout=httpx.Timeout(connect=10, read=REQUEST_TIMEOUT, write=10, pool=5),
+            ) as client:
+                resp = client.post(
+                    "/api/video/process",
+                    json={
+                        "url":           url,
+                        "num_clips":     10,
+                        "clip_duration": 60,
+                        "tracking":      True,
+                        "subtitles":     False,
+                    },
+                )
+                resp.raise_for_status()
+                task_id = resp.json().get("task_id")
+
+            if not task_id:
+                _set_erro("API não retornou task_id.")
+                return
+
+            status_text.value = f"⏳ Processando no servidor... (task: {task_id})"
+            status_text.color = C.TEXT_SECONDARY
+            page.update()
+
+            _notificar(
+                "Processamento iniciado! Você pode usar outras abas.",
+                cor=C.CYAN, duracao=5000,
+            )
+            _aguardar_task(task_id)
+
+        except httpx.ConnectError:
+            _set_erro(f"Não foi possível conectar à API em {API_BASE_URL}.")
+        except httpx.HTTPStatusError as e:
+            _set_erro(f"Erro da API: {e.response.status_code} — {e.response.text[:200]}")
+        except Exception as exc:
+            _set_erro(str(exc))
+
+    # ── Pipeline Local / Android ───────────────────────────────────
+
+    def _pipeline_local(nome_arquivo: str, conteudo, path_str):
+        try:
+            import io
+
+            if conteudo is None and path_str:
+                src = Path(path_str)
+                if not src.exists():
+                    _set_erro(f"Arquivo não encontrado: {src.name}")
+                    return
+                conteudo = src.read_bytes()
+
+            if not conteudo:
+                _set_erro("Não foi possível ler o arquivo.")
+                return
+
+            status_text.value  = f"Enviando {nome_arquivo} para o servidor..."
+            progress_row.value = 0.05
+            page.update()
+
+            upload_timeout = httpx.Timeout(connect=15, read=900, write=900, pool=10)
+
+            with httpx.Client(base_url=API_BASE_URL, timeout=upload_timeout) as client:
+                resp = client.post(
+                    "/api/video/upload",
+                    files={"file": (nome_arquivo, io.BytesIO(conteudo), "video/mp4")},
+                    data={"num_clips": "10", "clip_duration": "60", "tracking": "true"},
+                )
+                resp.raise_for_status()
+                task_id = resp.json().get("task_id")
+
+            if not task_id:
+                _set_erro("API não retornou task_id.")
+                return
+
+            status_text.value  = f"⏳ Upload concluído. Processando... (task: {task_id})"
+            status_text.color  = C.TEXT_SECONDARY
+            progress_row.value = 0.15
+            page.update()
+
+            _notificar(
+                "Upload enviado! Você pode usar outras abas.",
+                cor=C.CYAN, duracao=5000,
+            )
+            _aguardar_task(task_id)
+
+        except httpx.ConnectError:
+            _set_erro(f"Não foi possível conectar à API em {API_BASE_URL}.")
+        except httpx.HTTPStatusError as e:
+            _set_erro(f"Erro da API: {e.response.status_code} — {e.response.text[:200]}")
+        except Exception as exc:
+            _set_erro(str(exc))
+
+    # ── Handlers de entrada ────────────────────────────────────────
 
     def on_iniciar_download(e):
-        """Valida a URL e dispara o pipeline via download."""
         url = url_field.value.strip()
         if not url:
             url_field.border_color = C.ERROR
@@ -221,52 +349,55 @@ def build_aba_novo_projeto(estado: dict, page: ft.Page) -> ft.Control:
             return
 
         url_field.border_color  = C.BORDER_ACCENT
-        status_text.color       = C.TEXT_SECONDARY
         clips_column.visible    = False
         etapas_column.controls  = []
         btn_download.disabled   = True
-        btn_download.text       = "Processando..."
+        btn_gallery.disabled    = True
+        progress_row.visible    = True
+        progress_row.value      = 0.0
         page.update()
 
-        threading.Thread(target=simular_pipeline, args=(url,), daemon=True).start()
+        threading.Thread(target=_pipeline_youtube, args=(url,), daemon=True).start()
 
-    async def abrir_galeria_dispositivo(e: ft.Event[ft.Button]):
-        """
-        Abre o seletor de arquivos nativo filtrado apenas para vídeos.
-        Em Android/iOS mostra a galeria de mídia; em desktop o explorador.
-        Extensões aceitas: mp4, mov, mkv, avi, webm, 3gp, m4v.
-
-        No Flet 0.81+, pick_files() é async e retorna a lista diretamente,
-        sem necessidade de on_result ou page.overlay.
-        """
+    async def abrir_galeria_dispositivo(e):
         files = await ft.FilePicker().pick_files(
             dialog_title="Selecionar vídeo",
             allow_multiple=False,
             file_type=ft.FilePickerFileType.VIDEO,
         )
 
-        if files:
-            arquivo    = files[0]
-            video_path = arquivo.path  # caminho absoluto no dispositivo
-
-            btn_gallery.disabled   = True
-            status_text.value      = f"Vídeo selecionado: {arquivo.name}"
-            status_text.color      = C.ACCENT
-            clips_column.visible   = False
-            etapas_column.controls = []
-            page.update()
-
-            threading.Thread(
-                target=simular_pipeline, args=(video_path,), daemon=True
-            ).start()
-        else:
+        if not files:
             status_text.value = "Seleção cancelada."
-            status_text.color = C.ERROR
+            status_text.color = C.TEXT_SECONDARY
             page.update()
+            return
 
-    # ──────────────────────────────────────────────────────────────
-    #  HANDLERS DE CLIPE (fake — substitua pelas chamadas reais)
-    # ──────────────────────────────────────────────────────────────
+        arquivo  = files[0]
+        nome     = arquivo.name or "video.mp4"
+        conteudo = getattr(arquivo, "bytes", None)
+        path_str = getattr(arquivo, "path",  None)
+
+        if conteudo is None and path_str is None:
+            _set_erro("Não foi possível ler o arquivo. Verifique as permissões.")
+            return
+
+        btn_gallery.disabled   = True
+        btn_download.disabled  = True
+        clips_column.visible   = False
+        etapas_column.controls = []
+        progress_row.visible   = True
+        progress_row.value     = 0.0
+        status_text.value      = f"Preparando: {nome}"
+        status_text.color      = C.ACCENT
+        page.update()
+
+        threading.Thread(
+            target=_pipeline_local,
+            args=(nome, conteudo, path_str),
+            daemon=True,
+        ).start()
+
+    # ── Handlers de clipe ──────────────────────────────────────────
 
     def on_renderizar_clipe(clipe: ClipSugerido):
         clipe.status    = "renderizando"
@@ -274,10 +405,7 @@ def build_aba_novo_projeto(estado: dict, page: ft.Page) -> ft.Control:
         _atualizar_cards()
 
         def _render():
-            for p in range(0, 101, 2):
-                clipe.progresso = p / 100
-                time.sleep(0.04)
-            # renderizar_clipe(clipe)  ←  substitua aqui
+            # renderizar_clipe(clipe)  ← conectar quando disponível
             pass
             clipe.status    = "pronto"
             clipe.progresso = 1.0
@@ -285,15 +413,21 @@ def build_aba_novo_projeto(estado: dict, page: ft.Page) -> ft.Control:
 
         threading.Thread(target=_render, daemon=True).start()
 
+    def _fechar_dlg(dlg):
+        dlg.open = False
+        page.update()
+
     def on_preview_clipe(clipe: ClipSugerido):
         dlg = ft.AlertDialog(
             title=ft.Text(
-                clipe.titulo, color=C.TEXT_PRIMARY, weight=ft.FontWeight.W_700
+                clipe.titulo, color=C.TEXT_PRIMARY, weight=ft.FontWeight.W_700,
             ),
             content=ft.Column(
-                [
+                spacing=8, tight=True,
+                controls=[
                     ft.Row(
-                        [
+                        spacing=8,
+                        controls=[
                             tag(f"⏱ {clipe.inicio} → {clipe.fim}", C.CYAN, C.CYAN_SOFT),
                             tag(
                                 f"Score: {int(clipe.score * 100)}%",
@@ -301,58 +435,58 @@ def build_aba_novo_projeto(estado: dict, page: ft.Page) -> ft.Control:
                                 C.SUCCESS_SOFT if clipe.score >= 0.75 else C.WARNING_SOFT,
                             ),
                         ],
-                        spacing=8,
                     ),
                     ft.Container(height=8),
                     ft.Text(
-                        "Motivo da seleção:",
-                        size=12,
-                        color=C.TEXT_SECONDARY,
-                        weight=ft.FontWeight.W_600,
+                        "Motivo da seleção:", size=12,
+                        color=C.TEXT_SECONDARY, weight=ft.FontWeight.W_600,
                     ),
                     ft.Text(clipe.motivo, size=13, color=C.TEXT_PRIMARY),
                     ft.Container(height=8),
                     ft.Container(
-                        content=ft.Row(
-                            [
-                                ft.Icon(ft.Icons.INFO_OUTLINE, color=C.CYAN, size=14),
-                                ft.Text(
-                                    "Pré-visualização disponível após download.",
-                                    size=12,
-                                    color=C.TEXT_SECONDARY,
-                                ),
-                            ],
-                            spacing=8,
-                        ),
-                        padding=ft.padding.all(10),
                         border_radius=6,
                         bgcolor=C.CYAN_SOFT,
-                        border=ft.border.all(1, C.CYAN + "33"),
+                        border=ft.Border(
+                            left=ft.BorderSide(1, C.CYAN + "33"),
+                            right=ft.BorderSide(1, C.CYAN + "33"),
+                            top=ft.BorderSide(1, C.CYAN + "33"),
+                            bottom=ft.BorderSide(1, C.CYAN + "33"),
+                        ),
+                        padding=ft.Padding(left=10, right=10, top=10, bottom=10),
+                        content=ft.Row(
+                            spacing=8,
+                            controls=[
+                                ft.Icon(ft.Icons.INFO_OUTLINE, color=C.CYAN, size=14),
+                                ft.Text(
+                                    "Pré-visualização disponível após processamento.",
+                                    size=12, color=C.TEXT_SECONDARY,
+                                ),
+                            ],
+                        ),
                     ),
                 ],
-                spacing=8,
-                tight=True,
             ),
             bgcolor=C.SURFACE,
             shape=ft.RoundedRectangleBorder(radius=12),
             actions=[
                 ft.TextButton(
                     "Fechar",
-                    on_click=lambda e: page.close(dlg),
+                    on_click=lambda e: _fechar_dlg(dlg),
                     style=ft.ButtonStyle(color=C.TEXT_SECONDARY),
                 ),
-                ft.ElevatedButton(
+                ft.FilledButton(
                     "Renderizar este clipe",
-                    on_click=lambda e: (page.close(dlg), on_renderizar_clipe(clipe)),
+                    on_click=lambda e: (_fechar_dlg(dlg), on_renderizar_clipe(clipe)),
                     style=ft.ButtonStyle(
-                        bgcolor=C.ACCENT,
-                        color=C.BG,
+                        bgcolor=C.ACCENT, color=C.BG,
                         shape=ft.RoundedRectangleBorder(radius=6),
                     ),
                 ),
             ],
         )
-        page.open(dlg)
+        page.dialog = dlg
+        dlg.open    = True
+        page.update()
 
     def _atualizar_cards():
         if len(clips_column.controls) > 1:
@@ -364,9 +498,7 @@ def build_aba_novo_projeto(estado: dict, page: ft.Page) -> ft.Control:
                     )
         page.update()
 
-    # ──────────────────────────────────────────────────────────────
-    #  BOTÕES
-    # ──────────────────────────────────────────────────────────────
+    # ── Botões ─────────────────────────────────────────────────────
 
     _btn_style = ft.ButtonStyle(
         color=C.BG,
@@ -376,71 +508,82 @@ def build_aba_novo_projeto(estado: dict, page: ft.Page) -> ft.Control:
             ft.ControlState.DISABLED: C.BORDER,
         },
         shape=ft.RoundedRectangleBorder(radius=8),
-        padding=ft.padding.symmetric(horizontal=24, vertical=14),
+        padding=ft.Padding(left=24, right=24, top=14, bottom=14),
         text_style=ft.TextStyle(weight=ft.FontWeight.W_700, size=14),
         elevation=0,
     )
 
-    # Analisa e baixa o vídeo da internet
-    btn_download = ft.ElevatedButton(
-        content=ft.Text("Analisar e Baixar"),
-        icon=ft.Icons.ROCKET_LAUNCH_OUTLINED,
+    btn_download = ft.FilledButton(
+        content=ft.Row(
+            spacing=8, tight=True,
+            controls=[
+                ft.Icon(ft.Icons.ROCKET_LAUNCH_OUTLINED, size=16),
+                ft.Text("Analisar e Baixar", weight=ft.FontWeight.W_700, size=14),
+            ],
+        ),
         on_click=on_iniciar_download,
         style=_btn_style,
     )
 
-    # Abre o seletor de vídeos locais do dispositivo
-    btn_gallery = ft.ElevatedButton(
-        content=ft.Text("Adicionar da galeria"),
-        icon=ft.Icons.VIDEO_LIBRARY_OUTLINED,
-        on_click=abrir_galeria_dispositivo,  # async — Flet chama com await automaticamente
+    btn_gallery = ft.FilledButton(
+        content=ft.Row(
+            spacing=8, tight=True,
+            controls=[
+                ft.Icon(ft.Icons.VIDEO_LIBRARY_OUTLINED, size=16),
+                ft.Text("Adicionar da galeria", weight=ft.FontWeight.W_700, size=14),
+            ],
+        ),
+        on_click=abrir_galeria_dispositivo,
         style=_btn_style,
     )
 
-    # ──────────────────────────────────────────────────────────────
-    #  LAYOUT
-    # ──────────────────────────────────────────────────────────────
+    # ── Layout ─────────────────────────────────────────────────────
+
+    def _borda():
+        return ft.Border(
+            left=ft.BorderSide(1, C.BORDER), right=ft.BorderSide(1, C.BORDER),
+            top=ft.BorderSide(1, C.BORDER),  bottom=ft.BorderSide(1, C.BORDER),
+        )
 
     return ft.Column(
-        [
-            # Header da aba
+        spacing=8,
+        scroll=ft.ScrollMode.AUTO,
+        expand=True,
+        controls=[
             ft.Container(
+                padding=ft.Padding(left=0, right=0, top=0, bottom=16),
                 content=ft.Column(
-                    [
+                    spacing=4,
+                    controls=[
                         ft.Row(
-                            [
+                            spacing=10,
+                            controls=[
                                 ft.Icon(ft.Icons.ADD_CIRCLE_OUTLINE, color=C.ACCENT, size=20),
                                 ft.Text(
-                                    "Novo Projeto",
-                                    size=20,
-                                    weight=ft.FontWeight.W_800,
-                                    color=C.TEXT_PRIMARY,
+                                    "Novo Projeto", size=20,
+                                    weight=ft.FontWeight.W_800, color=C.TEXT_PRIMARY,
                                 ),
                             ],
-                            spacing=10,
                         ),
                         ft.Text(
                             "Cole a URL do YouTube para extrair os melhores momentos.",
-                            size=13,
-                            color=C.TEXT_SECONDARY,
+                            size=13, color=C.TEXT_SECONDARY,
                         ),
                     ],
-                    spacing=4,
                 ),
-                padding=ft.padding.only(bottom=16),
             ),
 
-            # Card de entrada
             ft.Container(
+                border_radius=10, bgcolor=C.SURFACE, border=_borda(),
+                padding=ft.Padding(left=16, right=16, top=16, bottom=16),
                 content=ft.Column(
-                    [
+                    spacing=8,
+                    controls=[
                         ft.Text(
-                            "URL do Vídeo",
-                            size=12,
-                            weight=ft.FontWeight.W_600,
-                            color=C.TEXT_SECONDARY,
+                            "URL do Vídeo", size=12,
+                            weight=ft.FontWeight.W_600, color=C.TEXT_SECONDARY,
                         ),
-                        ft.Row([url_field], spacing=0),
+                        ft.Row(controls=[url_field], spacing=0),
                         ft.Container(height=4),
                         ft.Row(
                             controls=[btn_gallery, btn_download],
@@ -448,51 +591,36 @@ def build_aba_novo_projeto(estado: dict, page: ft.Page) -> ft.Control:
                             vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
                     ],
-                    spacing=8,
                 ),
-                padding=ft.padding.all(16),
-                border_radius=10,
-                bgcolor=C.SURFACE,
-                border=ft.border.all(1, C.BORDER),
             ),
 
             ft.Container(height=4),
 
-            # Painel de progresso do pipeline
             ft.Container(
+                border_radius=10, bgcolor=C.SURFACE, border=_borda(),
+                padding=ft.Padding(left=16, right=16, top=16, bottom=16),
                 content=ft.Column(
-                    [
+                    spacing=8,
+                    controls=[
                         ft.Row(
-                            [
+                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                            controls=[
                                 ft.Text(
-                                    "Pipeline de processamento",
-                                    size=12,
-                                    weight=ft.FontWeight.W_600,
-                                    color=C.TEXT_SECONDARY,
+                                    "Pipeline de processamento", size=12,
+                                    weight=ft.FontWeight.W_600, color=C.TEXT_SECONDARY,
                                 ),
                                 ft.Container(expand=True),
                                 status_text,
                             ],
-                            vertical_alignment=ft.CrossAxisAlignment.CENTER,
                         ),
                         progress_row,
                         ft.Container(height=4),
                         etapas_column,
                     ],
-                    spacing=8,
                 ),
-                padding=ft.padding.all(16),
-                border_radius=10,
-                bgcolor=C.SURFACE,
-                border=ft.border.all(1, C.BORDER),
             ),
 
             ft.Container(height=8),
-
-            # Lista de clipes sugeridos pela IA
             clips_column,
         ],
-        spacing=8,
-        scroll=ft.ScrollMode.AUTO,
-        expand=True,
     )

@@ -64,7 +64,7 @@ def score_badge(score: float):
         border_radius=8,
         bgcolor=bg,
         border=ft.border.all(1, cor + "66"),
-        alignment=ft.alignment.CENTER,
+        alignment=ft.Alignment.TOP_CENTER,
     )
 
 
@@ -102,7 +102,7 @@ def clip_card(clipe, on_renderizar, on_preview) -> ft.Container:
     )
 
     btn_renderizar = ft.ElevatedButton(
-        text=ft.Text("Renderizar"),
+        ft.Text("Renderizar"),
         icon=ft.Icons.MOVIE_CREATION_OUTLINED,
         on_click=lambda e: on_renderizar(clipe),
         style=ft.ButtonStyle(
@@ -204,5 +204,5 @@ def clip_card(clipe, on_renderizar, on_preview) -> ft.Container:
         border_radius=10,
         bgcolor=C.SURFACE,
         border=ft.border.all(1, C.BORDER),
-        animate=ft.animation.Animation(200, ft.AnimationCurve.EASE_OUT),
+        animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
     )
