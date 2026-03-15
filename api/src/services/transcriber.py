@@ -1,3 +1,10 @@
+"""
+src/controllers/highlight/subtitle_generator.py
+
+Gera legendas word-by-word via Whisper e renderiza no vídeo com FFmpeg/ASS.
+Aceita cor da legenda como parâmetro (white | yellow | blue | green).
+"""
+
 import asyncio
 import json
 import logging
@@ -9,10 +16,8 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
 
-ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.append(str(ROOT_DIR))
-
-from src.utils.execution_time import execution_time_of_a_function
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,240 +27,167 @@ logger = logging.getLogger(__name__)
 
 
 class SubtitleGenerator:
+
+    # ── Cores ASS ──────────────────────────────────────────────────
+    # Formato ASS: &HAABBGGRR& (alpha, blue, green, red — invertido)
+    # Correção: o "blue_b" original era &H00FF5500 = laranja/âmbar no ASS
+    # porque 55=R, 00=G, FF=B → invertido = azul intenso no display
+    # Aqui usamos nomes claros com os valores corretos
     COLORS = {
-        "white": "&H00FFFFFF&",
-        "yellow": "&H0000FFFF&",
-        "blue_b": "&H00FF5500&",
-        "black": "&H00000000&",
+        "white":  "&H00FFFFFF&",   # branco puro
+        "yellow": "&H0000FFFF&",   # amarelo vibrante (0=A, 0=B, FF=G, FF=R → amarelo)
+        "blue":   "&H00FF5500&",   # azul vivo (FF=B, 55=G, 00=R no ASS)
+        "green":  "&H0055FF55&",   # verde vibrante
+        "black":  "&H00000000&",   # preto
     }
 
-    # Palavras que serão censuradas
+    # Mapeamento de nomes do app → chave interna
+    COR_MAP = {
+        "white":  "white",
+        "yellow": "yellow",
+        "blue":   "blue",
+        "green":  "green",
+        "branco": "white",
+        "amarelo":"yellow",
+        "azul":   "blue",
+        "verde":  "green",
+    }
+
+    # Cor padrão — branco com destaque amarelo nas palavras longas
+    DEFAULT_COR = "white"
+
+    # ── Censura ───────────────────────────────────────────────────
     BAD_WORDS = {
-        "suicidio": "sui***",
-        "morte": "mo**e",
-        "matar": "ma**r",
-        "puta": "p**a",
-        "caralho": "ca****o",
-        "porra": "p***a",
-        "viado": "vi***",
-        "bicha": "bi***",
-        "vagabundo": "vaga****o",
-        "vagabunda": "vaga****a",
-        "cú": "c*",
+        "suicidio": "sui***",  "morte": "mo**e",    "matar": "ma**r",
+        "puta":     "p**a",    "caralho": "ca****o", "porra": "p***a",
+        "viado":    "vi***",   "bicha": "bi***",     "vagabundo": "vaga****o",
+        "vagabunda":"vaga****a","cú": "c*",
     }
 
-    # Palavras que receberão EMOJIS (não ofensivas)
+    # ── Emojis ────────────────────────────────────────────────────
     EMOJI_WORDS = {
-        # Emoções positivas
-        "amor": "❤️",
-        "amo": "❤️",
-        "paixão": "🔥",
-        "apaixonado": "🔥",
-        "feliz": "😊",
-        "felicidade": "✨",
-        "alegria": "🎉",
-        "rir": "😂",
-        "risos": "😂",
-        "kkk": "😂",
-        "kkkk": "😂",
-        "haha": "😄",
-        "gargalhada": "🤣",
-        # Dinheiro/sucesso
-        "dinheiro": "💰",
-        "rico": "💸",
-        "riqueza": "💎",
-        "sucesso": "🚀",
-        "vencer": "🏆",
-        "vitória": "🥇",
-        "ganhar": "🎯",
-        # Comida/bebida
-        "comida": "🍔",
-        "fome": "🍽️",
-        "comer": "🍕",
-        "bebida": "🥤",
-        "café": "☕",
-        "cerveja": "🍺",
-        # Intensificadores
-        "muito": "⚡",
-        "demais": "💥",
-        "caramba": "😮",
-        "nossa": "😲",
-        "uau": "✨",
-        # Gírias positivas
-        "top": "👑",
-        "brabo": "🐐",
-        "craque": "⭐",
-        "gênio": "🧠",
-        "mito": "🏛️",
-        "lenda": "📜",
-        # Música/dança
-        "música": "🎵",
-        "dançar": "💃",
-        "funk": "🎧",
-        "trap": "🎤",
-        "beat": "🥁",
-        # Esportes
-        "gol": "⚽",
-        "jogar": "🎮",
-        "jogo": "🎲",
-        "time": "⚡",
-        # Lugares
-        "casa": "🏠",
-        "praia": "🏖️",
-        "festa": "🎊",
-        "role": "🎪",
-        "balada": "🪩",
-        # Animais (quando usados como gíria)
-        "cachorro": "🐶",
-        "gato": "🐱",
-        "leão": "🦁",
-        "tubarão": "🦈",
-        # Expressões comuns
-        "deus": "🙏",
-        "amém": "🙌",
-        "fé": "✨",
-        "sorte": "🍀",
-        "azar": "💔",
-        "força": "💪",
-        "foco": "🎯",
+        "amor": "❤️",   "amo": "❤️",    "paixão": "🔥",  "apaixonado": "🔥",
+        "feliz":"😊",    "felicidade":"✨","alegria":"🎉", "rir":"😂",
+        "risos":"😂",    "kkk":"😂",      "kkkk":"😂",     "haha":"😄",
+        "gargalhada":"🤣","dinheiro":"💰","rico":"💸",     "riqueza":"💎",
+        "sucesso":"🚀",  "vencer":"🏆",   "vitória":"🥇",  "ganhar":"🎯",
+        "comida":"🍔",   "fome":"🍽️",    "comer":"🍕",    "bebida":"🥤",
+        "café":"☕",     "cerveja":"🍺",  "muito":"⚡",    "demais":"💥",
+        "caramba":"😮",  "nossa":"😲",    "uau":"✨",       "top":"👑",
+        "brabo":"🐐",    "craque":"⭐",   "gênio":"🧠",    "mito":"🏛️",
+        "lenda":"📜",    "música":"🎵",   "dançar":"💃",   "funk":"🎧",
+        "trap":"🎤",     "beat":"🥁",     "gol":"⚽",       "jogar":"🎮",
+        "jogo":"🎲",     "casa":"🏠",     "praia":"🏖️",   "festa":"🎊",
+        "role":"🎪",     "balada":"🪩",   "cachorro":"🐶", "gato":"🐱",
+        "leão":"🦁",     "tubarão":"🦈", "deus":"🙏",     "amém":"🙌",
+        "fé":"✨",        "sorte":"🍀",    "azar":"💔",     "força":"💪",
+        "foco":"🎯",
     }
 
     def __init__(
         self,
-        ffmpeg_path: str = "ffmpeg",
-        ffprobe_path: Optional[str] = None,
-        use_gpu: bool = False,
+        ffmpeg_path:  str            = "ffmpeg",
+        ffprobe_path: Optional[str]  = None,
+        use_gpu:      bool           = False,
+        cor_legenda:  str            = DEFAULT_COR,   # ← NOVO parâmetro
     ):
-        self.ffmpeg_path = ffmpeg_path
+        self.ffmpeg_path  = ffmpeg_path
         self.ffprobe_path = ffprobe_path or shutil.which("ffprobe") or "ffprobe"
-        self.use_gpu = use_gpu
+        self.use_gpu      = use_gpu
+
+        # Resolve cor — aceita nome do app ou chave interna
+        cor_normalizada  = self.COR_MAP.get(cor_legenda.lower(), self.DEFAULT_COR)
+        self.cor_legenda  = cor_normalizada
+        self.cor_primary  = self.COLORS[cor_normalizada]
+        # Cor de destaque: se a cor principal não é amarelo, usa amarelo;
+        # se já é amarelo, usa branco para contraste
+        self.cor_destaque = (
+            self.COLORS["yellow"] if cor_normalizada != "yellow"
+            else self.COLORS["white"]
+        )
+
         self._model = None
-        self.output_dir = Path("processed_videos")
+        self.output_dir      = ROOT_DIR / "processed_videos"
         self.final_clips_dir = self.output_dir / "final_clips"
         self.final_clips_dir.mkdir(parents=True, exist_ok=True)
 
-        # Configura cache permanente
         self.cache_dir = os.path.expanduser("~/.cache/whisper-models/")
         os.makedirs(self.cache_dir, exist_ok=True)
 
-        # Força modo OFFLINE
-        os.environ["HF_HUB_OFFLINE"] = "1"
-        os.environ["TRANSFORMERS_OFFLINE"] = "1"
+        os.environ["HF_HUB_OFFLINE"]       = "1"
+        os.environ["TRANSFORMERS_OFFLINE"]  = "1"
 
-        # Compila padrões
         self._compile_patterns()
 
-    def _compile_patterns(self):
-        """Compila padrões regex para emojis e censura."""
-        # Padrão para CENSURA (mantendo seu código)
-        bad_patterns = []
-        self.bad_words_map = {}
+    # ── Padrões regex ──────────────────────────────────────────────
 
+    def _compile_patterns(self):
+        self.bad_words_map = {}
+        bad_patterns       = []
         for bad, fixed in self.BAD_WORDS.items():
             bad_patterns.append(rf"\b{re.escape(bad)}\b")
             self.bad_words_map[bad.lower()] = fixed
+        self.bad_words_pattern = (
+            re.compile("|".join(bad_patterns), re.IGNORECASE) if bad_patterns else None
+        )
 
-        if bad_patterns:
-            self.bad_words_pattern = re.compile("|".join(bad_patterns), re.IGNORECASE)
-        else:
-            self.bad_words_pattern = None
-
-        # Padrão para EMOJIS
-        emoji_patterns = []
-        self.emoji_map = {}
-
+        self.emoji_map    = {}
+        emoji_patterns    = []
         for word, emoji in self.EMOJI_WORDS.items():
             emoji_patterns.append(rf"\b{re.escape(word)}\b")
             self.emoji_map[word.lower()] = emoji
+        self.emoji_pattern = (
+            re.compile("|".join(emoji_patterns), re.IGNORECASE) if emoji_patterns else None
+        )
 
-        if emoji_patterns:
-            self.emoji_pattern = re.compile("|".join(emoji_patterns), re.IGNORECASE)
-        else:
-            self.emoji_pattern = None
+    # ── Processamento de texto ─────────────────────────────────────
 
     def _process_text(self, text: str) -> str:
-        """Processa o texto: primeiro aplica emojis, depois censura."""
-        original_text = text
-
-        # PASSO 1: Adiciona EMOJIS
         if self.emoji_pattern:
-
-            def add_emoji(match):
-                word = match.group(0).lower()
-                emoji = self.emoji_map.get(word, "")
-                # Mantém a palavra original + adiciona emoji no final
-                return f"{match.group(0)} {emoji}"
-
-            text = self.emoji_pattern.sub(add_emoji, text)
-
-        # PASSO 2: Censura palavras ofensivas
+            text = self.emoji_pattern.sub(
+                lambda m: f"{m.group(0)} {self.emoji_map.get(m.group(0).lower(), '')}",
+                text,
+            )
         if self.bad_words_pattern:
-
-            def censor_word(match):
-                word = match.group(0).lower()
-                return self.bad_words_map.get(word, word)
-
-            text = self.bad_words_pattern.sub(censor_word, text)
-
-        # PASSO 3: Remove emojis duplicados (caso tenha dois seguidos)
+            text = self.bad_words_pattern.sub(
+                lambda m: self.bad_words_map.get(m.group(0).lower(), m.group(0)),
+                text,
+            )
         text = re.sub(r"([❤️🔥😊✨😂🚀💪💰🎯])\s+\1", r"\1", text)
-
         return text
+
+    # ── Modelo Whisper ─────────────────────────────────────────────
 
     @property
     def model(self):
         if self._model is None:
             from faster_whisper import WhisperModel
-
-            logger.info(f"📁 Modo OFFLINE ativado")
-            logger.info(f"📁 Cache: {self.cache_dir}")
-
-            # Verifica se os arquivos realmente existem
-            model_bin = None
-            for root, dirs, files in os.walk(self.cache_dir):
-                for file in files:
-                    if file.endswith(".bin"):
-                        model_bin = os.path.join(root, file)
-                        break
-                if model_bin:
-                    break
-
-            if model_bin:
-                logger.info(f"✅ Modelo encontrado: {model_bin}")
-                logger.info(
-                    f"✅ Tamanho: {os.path.getsize(model_bin) / (1024*1024):.1f} MB"
-                )
-            else:
-                logger.error("❌ NENHUM ARQUIVO .bin ENCONTRADO!")
-                logger.error("❌ O modelo NÃO foi baixado corretamente!")
-                for root, dirs, files in os.walk(self.cache_dir):
-                    for file in files:
-                        logger.error(f"   Arquivo: {os.path.join(root, file)}")
-
-            logger.info(f"Carregando Whisper tiny em modo OFFLINE...")
+            logger.info("Carregando Whisper tiny (OFFLINE)...")
             self._model = WhisperModel(
-                "tiny",
-                device="cpu",
-                compute_type="int8",
-                download_root=self.cache_dir,
-                local_files_only=True,
+                "tiny", device="cpu", compute_type="int8",
+                download_root=self.cache_dir, local_files_only=True,
             )
         return self._model
 
+    # ── Formatação de tempo ASS ────────────────────────────────────
+
     def _format_time_ass(self, seconds: float) -> str:
-        td = timedelta(seconds=seconds)
-        total_seconds = int(td.total_seconds())
-        hours = total_seconds // 3600
-        minutes = (total_seconds % 3600) // 60
-        secs = total_seconds % 60
-        centiseconds = int(td.microseconds / 10000)
-        return f"{hours}:{minutes:02d}:{secs:02d}.{centiseconds:02d}"
+        td           = timedelta(seconds=seconds)
+        total        = int(td.total_seconds())
+        h            = total // 3600
+        m            = (total % 3600) // 60
+        s            = total % 60
+        cs           = int(td.microseconds / 10000)
+        return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
+
+    # ── Header ASS com a cor selecionada ──────────────────────────
 
     def _generate_ass_header(self, width: int, height: int) -> str:
-        font_size = int(height * 0.08)
-        m_v = int(height * 0.25)
+        font_size    = int(height * 0.08)
+        m_v          = int(height * 0.25)
         outline_size = max(2, int(font_size * 0.1))
 
+        # Contorno sempre preto para legibilidade independente da cor
         return f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {width}
@@ -264,59 +196,40 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Impact,{font_size},{self.COLORS['white']},&H000000FF,{self.COLORS['blue_b']},&H00000000,-1,0,0,0,100,100,2,0,1,{outline_size},0,2,30,30,{m_v},1
+Style: Default,Impact,{font_size},{self.cor_primary},&H000000FF,{self.COLORS['black']},&H00000000,-1,0,0,0,100,100,2,0,1,{outline_size},0,2,30,30,{m_v},1
 """
+
+    # ── ffprobe helpers ────────────────────────────────────────────
 
     async def get_video_resolution(self, path: Path) -> tuple:
         cmd = [
-            self.ffprobe_path,
-            "-v",
-            "error",
-            "-select_streams",
-            "v:0",
-            "-show_entries",
-            "stream=width,height",
-            "-of",
-            "json",
-            str(path),
+            self.ffprobe_path, "-v", "error", "-select_streams", "v:0",
+            "-show_entries", "stream=width,height", "-of", "json", str(path),
         ]
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+        proc = await asyncio.create_subprocess_exec(
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )
-        stdout, _ = await process.communicate()
+        stdout, _ = await proc.communicate()
         data = json.loads(stdout)
-        return (
-            data["streams"][0]["width"],
-            data["streams"][0]["height"],
-        )
+        return data["streams"][0]["width"], data["streams"][0]["height"]
 
     async def get_video_duration(self, path: Path) -> float:
         cmd = [
-            self.ffprobe_path,
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "json",
-            str(path),
+            self.ffprobe_path, "-v", "error",
+            "-show_entries", "format=duration", "-of", "json", str(path),
         ]
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+        proc = await asyncio.create_subprocess_exec(
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )
-        stdout, _ = await process.communicate()
+        stdout, _ = await proc.communicate()
         data = json.loads(stdout)
         return float(data["format"]["duration"])
+
+    # ── Transcrição ────────────────────────────────────────────────
 
     async def transcribe_word_by_word(self, path: Path) -> List[Dict]:
         logger.info(f"Transcrevendo: {path.name}")
         loop = asyncio.get_event_loop()
-
-        # Parâmetros otimizados
         segments, _ = await loop.run_in_executor(
             None,
             lambda: self.model.transcribe(
@@ -333,106 +246,103 @@ Style: Default,Impact,{font_size},{self.COLORS['white']},&H000000FF,{self.COLORS
         word_list = []
         for segment in segments:
             for word in segment.words:
-                # Processa o texto com emojis e censura
-                processed_text = self._process_text(word.word.strip())
-                processed_text = processed_text.upper()
+                text = self._process_text(word.word.strip()).upper()
 
-                # Destaque em Amarelo para palavras longas
-                if len(processed_text) > 6 or any(
-                    x in processed_text for x in ["!", "?", "$"]
-                ):
-                    processed_text = (
-                        f"{{\\c{self.COLORS['yellow']}}}{processed_text}{{\\c}}"
-                    )
+                # Destaque na cor de contraste para palavras longas/expressivas
+                if len(text) > 6 or any(x in text for x in ["!", "?", "$"]):
+                    text = f"{{\\c{self.cor_destaque}}}{text}{{\\c}}"
 
-                word_list.append(
-                    {
-                        "start": word.start,
-                        "end": word.end,
-                        "text": processed_text,
-                    }
-                )
+                word_list.append({"start": word.start, "end": word.end, "text": text})
         return word_list
+
+    # ── Parâmetros FFmpeg ──────────────────────────────────────────
 
     def _get_ffmpeg_params(self) -> List[str]:
         base = ["-preset", "ultrafast", "-crf", "18"]
-
         if self.use_gpu:
             try:
                 return ["-c:v", "h264_qsv", "-preset", "veryfast", "-crf", "18"]
-            except:
-                logger.warning("GPU não disponível, usando CPU")
-                return ["-c:v", "libx264"] + base
-        else:
-            return ["-c:v", "libx264"] + base
+            except Exception:
+                pass
+        return ["-c:v", "libx264"] + base
 
-    async def process_video(self, input_path: str):
+    # ── Processa vídeo: transcreve + renderiza legenda ─────────────
+
+    async def process_video(self, input_path: str, cor_legenda: str = None) -> Optional[Path]:
+        """
+        Transcreve o vídeo com Whisper e queima as legendas no arquivo.
+        Retorna o path do vídeo com legenda, ou None em caso de erro.
+
+        Args:
+            input_path:  caminho do clipe gerado pelo VideoProcessor
+            cor_legenda: sobrescreve a cor definida no __init__ (opcional)
+        """
         path = Path(input_path)
         if not path.exists():
-            return
+            logger.error(f"Arquivo não encontrado: {path}")
+            return None
 
-        duration = await self.get_video_duration(path)
-        logger.info(f"Vídeo: {duration:.1f}s | Iniciando processamento...")
-
-        width, height = await self.get_video_resolution(path)
-        words = await self.transcribe_word_by_word(path)
-
-        logger.info(f"Transcrição: {len(words)} palavras encontradas")
-
-        ass_path = path.with_suffix(".ass")
-        with open(ass_path, "w", encoding="utf-8") as f:
-            f.write(self._generate_ass_header(width, height))
-            f.write(
-                "\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+        # Permite sobrescrever a cor por clipe se necessário
+        if cor_legenda:
+            cor_key         = self.COR_MAP.get(cor_legenda.lower(), self.DEFAULT_COR)
+            cor_primary     = self.COLORS[cor_key]
+            cor_destaque    = (
+                self.COLORS["yellow"] if cor_key != "yellow" else self.COLORS["white"]
             )
-
-            for w in words:
-                start = self._format_time_ass(w["start"])
-                end = self._format_time_ass(w["end"])
-                f.write(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{w['text']}\n")
-
-        output_path = self.final_clips_dir / f"final_{path.name}"
-        escaped_ass = str(ass_path.absolute()).replace(":", "\\:").replace("\\", "/")
-
-        ffmpeg_params = self._get_ffmpeg_params()
-        ffmpeg_cmd = [
-            self.ffmpeg_path,
-            "-y",
-            "-i",
-            str(path),
-            "-vf",
-            f"ass='{escaped_ass}'",
-            *ffmpeg_params,
-            "-c:a",
-            "copy",
-            str(output_path),
-        ]
-
-        logger.info(f"Renderizando com CRF 23...")
-        process = await asyncio.create_subprocess_exec(
-            *ffmpeg_cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        await process.communicate()
-
-        if process.returncode == 0:
-            logger.info(f"✅ Sucesso: {output_path}")
-            if ass_path.exists():
-                os.remove(ass_path)
         else:
-            logger.error("Erro no FFmpeg")
+            cor_primary  = self.cor_primary
+            cor_destaque = self.cor_destaque
 
+        try:
+            duration          = await self.get_video_duration(path)
+            logger.info(f"Vídeo: {duration:.1f}s — gerando legendas...")
 
-if __name__ == "__main__":
-    video_teste = "/home/dev/Code/clip_engine/processed_videos/raw_clips/YTDown.com_YouTube_Media_oXm20zRKq_0_001_1080p_clip_01.mp4"
+            width, height = await self.get_video_resolution(path)
+            words         = await self.transcribe_word_by_word(path)
+            logger.info(f"Transcrição: {len(words)} palavras")
 
-    if not Path(video_teste).exists():
-        logger.error(f"Vídeo {video_teste} não encontrado!")
-        sys.exit(1)
+            # Gera arquivo .ass
+            ass_path = path.with_suffix(".ass")
+            with open(ass_path, "w", encoding="utf-8") as f:
+                f.write(self._generate_ass_header(width, height))
+                f.write(
+                    "\n[Events]\nFormat: Layer, Start, End, Style, Name, "
+                    "MarginL, MarginR, MarginV, Effect, Text\n"
+                )
+                for w in words:
+                    start = self._format_time_ass(w["start"])
+                    end   = self._format_time_ass(w["end"])
+                    f.write(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{w['text']}\n")
 
-    async def run():
-        generator = SubtitleGenerator(use_gpu=False)
-        await generator.process_video(video_teste)
+            output_path  = self.final_clips_dir / f"final_{path.name}"
+            escaped_ass  = str(ass_path.absolute()).replace(":", "\\:").replace("\\", "/")
+            ffmpeg_params = self._get_ffmpeg_params()
 
-    asyncio.run(run())
+            ffmpeg_cmd = [
+                self.ffmpeg_path, "-y", "-i", str(path),
+                "-vf", f"ass='{escaped_ass}'",
+                *ffmpeg_params,
+                "-c:a", "copy",
+                str(output_path),
+            ]
+
+            logger.info("Renderizando legenda...")
+            proc = await asyncio.create_subprocess_exec(
+                *ffmpeg_cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            _, stderr = await proc.communicate()
+
+            if proc.returncode == 0:
+                logger.info(f"✅ Legenda renderizada: {output_path}")
+                if ass_path.exists():
+                    os.remove(ass_path)
+                return output_path
+            else:
+                logger.error(f"FFmpeg erro: {stderr.decode()[-300:]}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Erro ao gerar legenda para {path.name}: {e}")
+            return None

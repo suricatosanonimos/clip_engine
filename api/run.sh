@@ -1,1 +1,1 @@
-uvicorn main_api:app --reload --port 8000
+uvicorn main_api:app  --port 8000

@@ -1,3 +1,4 @@
+# /home/dev/Code/clip_engine/api/src/controllers/highlight/create_video.py
 import asyncio
 import json
 import os
@@ -105,60 +106,3 @@ class VideoAssembler(GenerateFinalVideo):
         final_video.close()
         print(f"✅ Vídeo finalizado com sucesso em: {output_path}")
 
-
-# --- FLUXO PRINCIPAL DE EXECUÇÃO CORRIGIDO ---
-async def main():
-    # 1. Configurações de caminhos
-    caminhos_videos = [
-        "/home/dev/Code/clip_engine/processed_videos/final_clips/final_podcast_bluzeira_clip_02.mp4",
-    ]
-
-    print(f"🚀 Iniciando processamento de {len(caminhos_videos)} vídeos...")
-
-    # Loop principal para iterar sobre a lista
-    for video_path in caminhos_videos:
-        p = Path(video_path)
-
-        # Verifica se o arquivo existe antes de processar
-        if not p.exists():
-            print(f"❌ Vídeo de entrada não encontrado, pulando: {video_path}")
-            continue  # Usa 'continue' para ir para o próximo vídeo em vez de parar tudo
-
-        print(f"\n🎬 Processando: {p.name}")
-        print("🤖 Iniciando Whisper + Brain...")
-
-        try:
-            # 2. Chama a Transcrição + IA (Processo Assíncrono)
-            analise_ia = await process_video_with_ai(video_input=video_path)
-
-            if analise_ia:
-                print(
-                    f"✅ IA identificou {len(analise_ia.get('momentos', []))} momentos."
-                )
-
-                # 3. Define o caminho do JSON gerado
-                caminho_json_ia = p.with_name(f"ai_analysis_{p.stem}.json")
-
-                # 4. Inicia a Montagem do Vídeo
-                if caminho_json_ia.exists():
-                    print(f"✂️  Iniciando montagem do corte final...")
-                    assembler = VideoAssembler(ai_results_path=str(caminho_json_ia))
-                    assembler.create_final_cut(original_video_path=video_path)
-                else:
-                    print(
-                        f"⚠️ Erro: Arquivo de análise não encontrado em: {caminho_json_ia}"
-                    )
-            else:
-                print(f"❌ A IA não retornou momentos válidos para {p.name}")
-
-        except Exception as e:
-            print(f"💥 Erro crítico ao processar {p.name}: {e}")
-
-    print("\n✨ Todos os vídeos da lista foram processados!")
-
-
-if __name__ == "__main__":
-    import asyncio  # Garanta que o import está no topo do seu arquivo
-
-    print("Sistema de Clips Iniciado...")
-    asyncio.run(main())

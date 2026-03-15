@@ -1,25 +1,12 @@
 """
-CLIP ENGINE — main.py (versão cloud)
-
-Fluxo:
-  1. Inicia → verifica sessão Supabase ativa
-  2. Se não autenticado → mostra tela de login (views/auth.py)
-  3. Se autenticado → mostra app principal com nav bar
-  4. Header com e-mail do usuário + botão de logout
-
-Variáveis de ambiente necessárias:
-  SUPABASE_URL       → Supabase dashboard > Settings > API > Project URL
-  SUPABASE_ANON_KEY  → Supabase dashboard > Settings > API > anon public key
+CLIP ENGINE — main.py
 """
 
-import os
 import sys
 from pathlib import Path
 
 import flet as ft
-from supabase import create_client
 
-# ── Path setup ────────────────────────────────────────────────────
 ROOT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT_DIR))
 
@@ -29,16 +16,19 @@ from src.views.home       import build_aba_novo_projeto
 from src.views.processing import build_aba_processamento
 from src.views.gallery    import build_aba_galeria
 
-# ── Supabase ──────────────────────────────────────────────────────
-SUPABASE_URL      = os.getenv("SUPABASE_URL",      "https://SEU_PROJETO.supabase.co")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "SUA_ANON_KEY")
 
-supabase = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+DEV_MODE = True  # ← mude para False quando quiser reativar o login
 
 
 def main(page: ft.Page):
 
-    # ── Configuração da página ─────────────────────────────────────
+    try:
+        page.padding = ft.padding.only(
+            top=ft.SafeCast(page).top if hasattr(page, "safe_area") else 40
+        )
+    except:
+        page.padding = ft.padding.only(top=40)
+
     page.title      = "Clip Engine"
     page.theme_mode = ft.ThemeMode.DARK
     page.bgcolor    = C.BG
@@ -50,39 +40,27 @@ def main(page: ft.Page):
 
     page.theme = ft.Theme(
         color_scheme=ft.ColorScheme(
-            primary=C.ACCENT,
-            secondary=C.CYAN,
+            primary=C.ACCENT, secondary=C.CYAN,
             surface=C.SURFACE,
-            on_primary=C.BG,
-            on_surface=C.TEXT_PRIMARY,
+            on_primary=C.BG, on_surface=C.TEXT_PRIMARY,
         ),
         visual_density=ft.VisualDensity.COMPACT,
     )
 
-    try:
-            page.padding = ft.Padding.only(
-                top=ft.SafeCast(page).top if hasattr(page, "safe_area") else 40
-            )
-    except:
-        page.padding = ft.padding.only(top=40)
+    estado = {
+        "clipes":    {},
+        "projetos":  {},
+        "aba_atual": 0,
+        "user_info": None,
+        "token":     None,
+    }
 
-
-    # ── Estado global ──────────────────────────────────────────────
-    estado = {"clipes": {}, "projetos": {}, "aba_atual": 0}
-
-    # ── Área de conteúdo principal ─────────────────────────────────
-    corpo = ft.Container(expand=True, bgcolor=C.BG)
-
-    # ── Header ────────────────────────────────────────────────────
-    usuario_txt = ft.Text(
-        "", size=11, color=C.TEXT_MUTED, font_family="monospace",
-    )
+    corpo      = ft.Container(expand=True, bgcolor=C.BG)
+    usuario_txt = ft.Text("", size=11, color=C.TEXT_MUTED, font_family="monospace")
 
     def on_logout(e):
-        try:
-            supabase.auth.sign_out()
-        except Exception:
-            pass
+        estado["user_info"] = None
+        estado["token"]     = None
         _mostrar_login()
 
     btn_logout = ft.IconButton(
@@ -105,7 +83,6 @@ def main(page: ft.Page):
         content=ft.Row(
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
             controls=[
-                # Logo
                 ft.Row(
                     spacing=10,
                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -119,26 +96,21 @@ def main(page: ft.Page):
                         ),
                         ft.Text(
                             "CLIP ENGINE",
-                            size=16,
-                            weight=ft.FontWeight.W_900,
-                            color=C.TEXT_PRIMARY,
-                            font_family="monospace",
+                            size=16, weight=ft.FontWeight.W_900,
+                            color=C.TEXT_PRIMARY, font_family="monospace",
                         ),
                     ],
                 ),
                 ft.Container(expand=True),
-                # E-mail do usuário
                 usuario_txt,
-                # Logout
                 btn_logout,
             ],
         ),
     )
 
-    # ── App principal (construído após login) ──────────────────────
-
-    def _construir_app(user):
-        """Monta o app completo com as 3 abas após autenticação."""
+    def _construir_app(user: dict, token: str = None):
+        estado["user_info"] = user
+        estado["token"]     = token
 
         abas_conteudo = [
             build_aba_novo_projeto(estado, page),
@@ -187,8 +159,7 @@ def main(page: ft.Page):
         )
 
         corpo.content = ft.Column(
-            spacing=0,
-            expand=True,
+            spacing=0, expand=True,
             controls=[
                 conteudo_aba,
                 ft.Container(
@@ -198,42 +169,47 @@ def main(page: ft.Page):
             ],
         )
 
-        # Atualiza header com dados do usuário
-        email = getattr(user, "email", "") or ""
-        usuario_txt.value  = email[:22] + ("…" if len(email) > 22 else "")
+        nome  = user.get("nome", "")
+        email = user.get("email", "")
+        label = nome if nome else email
+        usuario_txt.value  = label[:22] + ("…" if len(label) > 22 else "")
         btn_logout.visible = True
         page.update()
 
     def _mostrar_login():
-        """Volta para a tela de login e limpa o header."""
-        btn_logout.visible  = False
-        usuario_txt.value   = ""
+        btn_logout.visible = False
+        usuario_txt.value  = ""
         corpo.content = build_tela_auth(
             page=page,
-            supabase=supabase,
-            on_autenticado=_construir_app,
+            on_autenticado=_on_autenticado,
         )
         page.update()
 
-    # ── Verifica sessão existente ao abrir o app ───────────────────
-    try:
-        sessao = supabase.auth.get_session()
-        if sessao and sessao.user:
-            _construir_app(sessao.user)
-        else:
-            _mostrar_login()
-    except Exception:
-        _mostrar_login()
+    def _on_autenticado(user: dict, token: str = None):
+        _construir_app(user, token)
 
-    # ── Layout final ───────────────────────────────────────────────
+    # ── Inicialização ──────────────────────────────────────────────
     page.add(
         ft.Column(
-            spacing=0,
-            expand=True,
+            spacing=0, expand=True,
             controls=[header, corpo],
         )
     )
 
+    if DEV_MODE:
+        _construir_app(
+            user={
+                "id":         "dev-local",
+                "email":      "dev@local.com",
+                "nome":       "Gilderlan",
+                "avatar_url": None,
+                "created_at": "",
+            },
+            token="fake-token-dev",
+        )
+    else:
+        _mostrar_login()
+
 
 if __name__ == "__main__":
-        ft.run(main=main)
+    ft.run(main=main)

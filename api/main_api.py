@@ -43,16 +43,25 @@ if str(ROOT_DIR) not in sys.path:
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
+
+
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+
 # ── imports das rotas (agora `src` está no path) ──────────────────
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.routes.info          import router as info_router
 from src.api.routes.status        import router as status_router
-from src.api.titles.transcription import router as transcription_router
+#from src.api.titles.transcription import router as transcription_router
 from src.api.routes.upload       import router as upload_router
 from src.api.routes.video         import router as video_router
-
+from src.api.routes.register import router as register_account
+from src.api.routes.login import router as login_in_account
+from src.api.routes.clips import router as clips_video
 # ──────────────────────────────────────────────────────────────────
 #  APP
 # ──────────────────────────────────────────────────────────────────
@@ -67,6 +76,11 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+
+
+app.state.limiter = Limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ──────────────────────────────────────────────────────────────────
 #  CORS — libera o app Flet (e qualquer origem em dev)
@@ -88,8 +102,10 @@ app.include_router(video_router,         prefix="/api")
 app.include_router(upload_router,        prefix="/api")
 app.include_router(status_router,        prefix="/api")
 app.include_router(info_router,          prefix="/api")
-app.include_router(transcription_router, prefix="/api")
-
+#app.include_router(transcription_router, prefix="/api")
+app.include_router(register_account, prefix="/api")
+app.include_router(login_in_account, prefix="/api")
+app.include_router(clips_video, prefix="/api")
 # ──────────────────────────────────────────────────────────────────
 #  HEALTH CHECK
 # ──────────────────────────────────────────────────────────────────

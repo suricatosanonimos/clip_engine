@@ -1,37 +1,32 @@
 """
 Tela de Login / Cadastro — Clip Engine
-Flet 0.82 | Supabase Auth | Mobile-first
+Flet 0.82 | API HTTP | Mobile-first
 
-CORREÇÕES DE TAMANHO:
-  • Card maior e mais espaçoso
-  • Campos de texto com altura aumentada
-  • Botões maiores e mais confortáveis
-  • Melhor espaçamento entre elementos
-  • Adaptação responsiva para tablets
+on_autenticado(user, token) é chamado com:
+  user  = {"id": "...", "email": "...", "nome": "...", ...}
+  token = access_token JWT (para usar em chamadas autenticadas)
 """
 
+import re
 import threading
-import time
 from typing import Callable
 
 import flet as ft
-from supabase import Client
+import httpx
 
 from src.views.theme import C
+
+API_BASE_URL = "http://127.0.0.1:8000/api"
 
 
 def build_tela_auth(
     page: ft.Page,
-    supabase: Client,
-    on_autenticado: Callable,
+    on_autenticado: Callable,       # on_autenticado(user: dict, token: str)
 ) -> ft.Control:
 
     _modo = {"valor": "login"}
 
-    # ──────────────────────────────────────────────────────────────
-    #  CAMPOS — TAMANHO AUMENTADO
-    # ──────────────────────────────────────────────────────────────
-
+    # ── Estilo dos campos ──────────────────────────────────────────
     _field_style = dict(
         border_color=C.BORDER_ACCENT,
         focused_border_color=C.ACCENT,
@@ -42,10 +37,12 @@ def build_tela_auth(
         hint_style=ft.TextStyle(color=C.TEXT_MUTED, size=13),
         border_radius=12,
         text_size=15,
-        height=56,  # Altura fixa maior
+        height=56,
+        expand=True,
         content_padding=ft.Padding(left=16, right=16, top=8, bottom=8),
     )
 
+    # ── Campos ────────────────────────────────────────────────────
     campo_nome = ft.TextField(
         label="Nome completo",
         hint_text="Seu nome completo",
@@ -85,99 +82,42 @@ def build_tela_auth(
         **_field_style,
     )
 
+    # ── Mensagens e loading ────────────────────────────────────────
     msg_erro = ft.Text(
-        "", color=C.ERROR, size=13, weight=ft.FontWeight.W_500, visible=False,
+        "", color=C.ERROR, size=13, weight=ft.FontWeight.W_500,
+        visible=False,
         animate_opacity=ft.Animation(200, ft.AnimationCurve.EASE_IN),
+        text_align=ft.TextAlign.CENTER,
     )
     msg_info = ft.Text(
-        "", color=C.SUCCESS, size=13, weight=ft.FontWeight.W_500, visible=False,
+        "", color=C.SUCCESS, size=13, weight=ft.FontWeight.W_500,
+        visible=False,
         animate_opacity=ft.Animation(200, ft.AnimationCurve.EASE_IN),
+        text_align=ft.TextAlign.CENTER,
     )
-
     loading = ft.ProgressBar(
         color=C.ACCENT, bgcolor=C.BORDER, height=4,
         border_radius=4, visible=False,
     )
 
-    # ──────────────────────────────────────────────────────────────
-    #  TEXTOS DINÂMICOS — MAIORES
-    # ──────────────────────────────────────────────────────────────
-
+    # ── Títulos dinâmicos ─────────────────────────────────────────
     titulo = ft.Text(
         "Bem-vindo de volta",
-        size=32,  # Aumentado de 26 para 32
-        weight=ft.FontWeight.W_800,
+        size=32, weight=ft.FontWeight.W_800,
         color=C.TEXT_PRIMARY,
         animate_opacity=ft.Animation(250, ft.AnimationCurve.EASE_IN_OUT),
+        text_align=ft.TextAlign.CENTER,
     )
-
     subtitulo = ft.Text(
         "Entre para continuar no Clip Engine",
-        size=15,  # Aumentado de 13 para 15
-        color=C.TEXT_SECONDARY,
+        size=15, color=C.TEXT_SECONDARY,
         animate_opacity=ft.Animation(250, ft.AnimationCurve.EASE_IN_OUT),
+        text_align=ft.TextAlign.CENTER,
     )
 
-    # ──────────────────────────────────────────────────────────────
-    #  ANIMAÇÃO DE SUCESSO — MAIOR
-    # ──────────────────────────────────────────────────────────────
-
-    icone_sucesso = ft.Container(
-        visible=False,
-        alignment=ft.Alignment(0, 0),
-        animate_scale=ft.Animation(500, ft.AnimationCurve.BOUNCE_OUT),
-        animate_opacity=ft.Animation(400, ft.AnimationCurve.EASE_OUT),
-        scale=ft.Scale(0),
-        opacity=0,
-        content=ft.Column(
-            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-            spacing=12,  # Aumentado
-            controls=[
-                ft.Container(
-                    width=88, height=88,  # Aumentado de 72 para 88
-                    border_radius=44,
-                    bgcolor=C.SUCCESS + "22",
-                    border=ft.Border.all(3, C.SUCCESS),  # Borda mais grossa
-                    alignment=ft.Alignment(0, 0),
-                    content=ft.Icon(ft.Icons.CHECK_ROUNDED, color=C.SUCCESS, size=44),
-                ),
-                ft.Text(
-                    "Conta criada!",
-                    size=18,  # Aumentado
-                    weight=ft.FontWeight.W_700,
-                    color=C.SUCCESS,
-                ),
-                ft.Text(
-                    "Verifique seu e-mail para confirmar.",
-                    size=13,  # Aumentado
-                    color=C.TEXT_SECONDARY,
-                    text_align=ft.TextAlign.CENTER,
-                ),
-            ],
-        ),
-    )
-
-    def _animar_sucesso():
-        """Mostra animação de sucesso e volta para login após 2.5s."""
-        icone_sucesso.visible = True
-        icone_sucesso.scale   = ft.Scale(1)
-        icone_sucesso.opacity = 1
-        page.update()
-        time.sleep(2.5)
-        icone_sucesso.opacity = 0
-        icone_sucesso.scale   = ft.Scale(0.5)
-        page.update()
-        time.sleep(0.4)
-        icone_sucesso.visible = False
-        _modo["valor"] = "login"
-        _atualizar_modo()
-
-    # ──────────────────────────────────────────────────────────────
-    #  BOTÕES — MAIORES E MAIS ESPAÇOSOS
-    # ──────────────────────────────────────────────────────────────
-
+    # ── Botões ────────────────────────────────────────────────────
     btn_principal = ft.FilledButton(
-        content=ft.Text("Entrar", weight=ft.FontWeight.W_700, size=16),  # Texto maior
+        content=ft.Text("Entrar", weight=ft.FontWeight.W_700, size=16),
         style=ft.ButtonStyle(
             bgcolor={
                 ft.ControlState.DEFAULT:  C.ACCENT,
@@ -186,49 +126,49 @@ def build_tela_auth(
             },
             color=C.BG,
             shape=ft.RoundedRectangleBorder(radius=12),
-            padding=ft.Padding(left=0, right=0, top=18, bottom=18),  # Padding vertical aumentado
+            padding=ft.Padding(left=0, right=0, top=18, bottom=18),
             animation_duration=200,
         ),
         expand=True,
     )
 
     btn_alternar = ft.TextButton(
-        style=ft.ButtonStyle(color=C.ACCENT, text_style=ft.TextStyle(size=15)),  # Texto maior
+        "Não tem conta? Cadastre-se",
+        style=ft.ButtonStyle(
+            color={
+                ft.ControlState.DEFAULT: ft.Colors.WHITE,
+                ft.ControlState.HOVERED: ft.Colors.WHITE70,
+            },
+            text_style=ft.TextStyle(size=15, weight=ft.FontWeight.W_500),
+        ),
     )
 
     btn_google = ft.OutlinedButton(
         content=ft.Row(
-            spacing=12,  # Aumentado
-            tight=True,
+            spacing=12, tight=True,
             alignment=ft.MainAxisAlignment.CENTER,
             controls=[
-                ft.Icon(ft.Icons.G_MOBILEDATA, color=C.ACCENT, size=24),  # Ícone maior
-                ft.Text(
-                    "Continuar com Google",
-                    color=C.TEXT_PRIMARY,
-                    weight=ft.FontWeight.W_600,
-                    size=15,  # Aumentado
-                ),
+                ft.Icon(ft.Icons.G_MOBILEDATA, color=C.ACCENT, size=24),
+                ft.Text("Continuar com Google", color=C.TEXT_PRIMARY,
+                    weight=ft.FontWeight.W_600, size=15),
             ],
         ),
         style=ft.ButtonStyle(
-            side=ft.BorderSide(1.5, C.BORDER_ACCENT),  # Borda mais grossa
+            side=ft.BorderSide(1.5, C.BORDER_ACCENT),
             shape=ft.RoundedRectangleBorder(radius=12),
-            padding=ft.Padding(left=0, right=0, top=18, bottom=18),  # Padding maior
+            padding=ft.Padding(left=0, right=0, top=18, bottom=18),
             overlay_color={ft.ControlState.HOVERED: C.SURFACE_2},
         ),
         expand=True,
         on_click=lambda e: _login_google(e),
     )
 
-    # ──────────────────────────────────────────────────────────────
-    #  HELPERS UI
-    # ──────────────────────────────────────────────────────────────
+    # ── Helpers de UI ─────────────────────────────────────────────
 
     def _set_loading(ativo: bool):
         loading.visible        = ativo
         btn_principal.disabled = ativo
-        btn_google.disabled    = ativo
+        btn_alternar.disabled  = ativo
         page.update()
 
     def _set_erro(mensagem: str):
@@ -247,27 +187,20 @@ def build_tela_auth(
         _set_loading(False)
         page.update()
 
-    # ──────────────────────────────────────────────────────────────
-    #  ALTERNAR LOGIN ↔ CADASTRO
-    # ──────────────────────────────────────────────────────────────
+    # ── Alternar login ↔ cadastro ─────────────────────────────────
 
     def _atualizar_modo():
         modo     = _modo["valor"]
         eh_login = (modo == "login")
 
-        # Anima entrada dos campos extras
         if eh_login:
-            campo_nome.opacity     = 0
-            campo_confirma.opacity = 0
-            page.update()
-            time.sleep(0.15)
             campo_nome.visible     = False
             campo_confirma.visible = False
+            campo_nome.opacity     = 0
+            campo_confirma.opacity = 0
         else:
             campo_nome.visible     = True
             campo_confirma.visible = True
-            page.update()
-            time.sleep(0.05)
             campo_nome.opacity     = 1
             campo_confirma.opacity = 1
 
@@ -276,44 +209,30 @@ def build_tela_auth(
             weight=ft.FontWeight.W_700, size=16,
         )
         btn_alternar.text = (
-            "Não tem conta? Cadastre-se"
-            if eh_login else
-            "Já tem conta? Entrar"
+            "Não tem conta? Cadastre-se" if eh_login else "Já tem conta? Entrar"
         )
-
-        titulo.opacity    = 0
-        subtitulo.opacity = 0
-        page.update()
-        time.sleep(0.1)
-
         titulo.value    = "Bem-vindo de volta" if eh_login else "Criar conta"
         subtitulo.value = (
             "Entre para continuar no Clip Engine"
-            if eh_login else
-            "Preencha os dados abaixo"
+            if eh_login else "Preencha os dados abaixo"
         )
-        titulo.opacity    = 1
-        subtitulo.opacity = 1
-
-        msg_erro.visible  = False
-        msg_info.visible  = False
+        campo_email.value = ""
         campo_senha.value = ""
         if not eh_login:
+            campo_nome.value     = ""
             campo_confirma.value = ""
 
+        msg_erro.visible = False
+        msg_info.visible = False
         page.update()
 
     def on_alternar(e):
-        def _trocar():
-            _modo["valor"] = "cadastro" if _modo["valor"] == "login" else "login"
-            _atualizar_modo()
-        threading.Thread(target=_trocar, daemon=True).start()
+        _modo["valor"] = "cadastro" if _modo["valor"] == "login" else "login"
+        _atualizar_modo()
 
     btn_alternar.on_click = on_alternar
 
-    # ──────────────────────────────────────────────────────────────
-    #  AUTH FUNCTIONS (mantidas iguais)
-    # ──────────────────────────────────────────────────────────────
+    # ── LOGIN via API ─────────────────────────────────────────────
 
     def _fazer_login():
         email = campo_email.value.strip()
@@ -324,21 +243,35 @@ def build_tela_auth(
             return
 
         try:
-            resp = supabase.auth.sign_in_with_password(
-                {"email": email, "password": senha}
-            )
-            if resp.user:
-                on_autenticado(resp.user)
+            with httpx.Client(timeout=30.0) as client:
+                resp = client.post(
+                    f"{API_BASE_URL}/auth/login",
+                    json={"email": email, "senha": senha},
+                )
+
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("success"):
+                    user  = data["user"]
+                    token = data.get("session", {}).get("access_token", "")
+                    # Chama o main.py com user dict + token
+                    on_autenticado(user, token)
+                else:
+                    _set_erro(data.get("message", "Erro no login."))
             else:
-                _set_erro("Credenciais inválidas.")
+                # Extrai mensagem do detail
+                try:
+                    detail = resp.json().get("detail", f"Erro {resp.status_code}")
+                except Exception:
+                    detail = resp.text[:120]
+                _set_erro(detail)
+
+        except httpx.ConnectError:
+            _set_erro(f"Não foi possível conectar à API em {API_BASE_URL}.")
         except Exception as ex:
-            msg = str(ex)
-            if "Invalid login credentials" in msg:
-                _set_erro("E-mail ou senha incorretos.")
-            elif "Email not confirmed" in msg:
-                _set_erro("Confirme seu e-mail antes de entrar.")
-            else:
-                _set_erro(f"Erro: {msg[:120]}")
+            _set_erro(f"Erro: {str(ex)[:120]}")
+
+    # ── CADASTRO via API ──────────────────────────────────────────
 
     def _fazer_cadastro():
         nome  = campo_nome.value.strip()
@@ -360,38 +293,55 @@ def build_tela_auth(
             return
 
         try:
-            resp = supabase.auth.sign_up({
-                "email":   email,
-                "password": senha,
-                "options": {"data": {"full_name": nome}},
-            })
-            if resp.user:
-                _set_loading(False)
-                threading.Thread(target=_animar_sucesso, daemon=True).start()
+            with httpx.Client(timeout=30.0) as client:
+                resp = client.post(
+                    f"{API_BASE_URL}/auth/register",
+                    json={"nome": nome, "email": email, "senha": senha},
+                )
+
+            if resp.status_code == 201:
+                data = resp.json()
+                if data.get("success"):
+                    # Se retornou sessão → login automático
+                    if data.get("session") and data.get("user"):
+                        user  = data["user"]
+                        token = data["session"].get("access_token", "")
+                        on_autenticado(user, token)
+                    else:
+                        # Supabase precisa de confirmação de e-mail
+                        _set_info(data.get("message",
+                            "Conta criada! Verifique seu e-mail e faça login."))
+                        _modo["valor"] = "login"
+                        _atualizar_modo()
+                else:
+                    _set_erro(data.get("message", "Erro no cadastro."))
             else:
-                _set_erro("Não foi possível criar a conta.")
+                try:
+                    detail = resp.json().get("detail", f"Erro {resp.status_code}")
+                except Exception:
+                    detail = resp.text[:120]
+                _set_erro(detail)
+
+        except httpx.ConnectError:
+            _set_erro(f"Não foi possível conectar à API em {API_BASE_URL}.")
         except Exception as ex:
-            msg = str(ex)
-            if "already registered" in msg or "already exists" in msg:
-                _set_erro("Este e-mail já está cadastrado.")
-            else:
-                _set_erro(f"Erro: {msg[:120]}")
+            _set_erro(f"Erro: {str(ex)[:120]}")
+
+    # ── GOOGLE OAuth ──────────────────────────────────────────────
 
     def _login_google(e):
         try:
-            resp = supabase.auth.sign_in_with_oauth({
-                "provider": "google",
-                "options":  {"redirect_to": "io.clipengine.app://login-callback"},
-            })
-            if resp.url:
-                page.launch_url(resp.url)
-                _set_info("Navegador aberto. Autorize com sua conta Google.")
+            with httpx.Client(timeout=10.0) as client:
+                resp = client.post(f"{API_BASE_URL}/auth/google")
+            if resp.status_code == 200:
+                url = resp.json().get("url")
+                if url:
+                    page.launch_url(url)
+                    _set_info("Navegador aberto. Autorize com sua conta Google.")
         except Exception as ex:
             _set_erro(f"Erro Google: {str(ex)[:120]}")
 
-    # ──────────────────────────────────────────────────────────────
-    #  HANDLER BOTÃO PRINCIPAL
-    # ──────────────────────────────────────────────────────────────
+    # ── Handler botão principal ───────────────────────────────────
 
     def on_btn_principal(e):
         _set_loading(True)
@@ -410,14 +360,12 @@ def build_tela_auth(
 
     btn_principal.on_click = on_btn_principal
 
-    # ──────────────────────────────────────────────────────────────
-    #  DIVIDER "ou" — MAIS ESPAÇOSO
-    # ──────────────────────────────────────────────────────────────
+    # ── Divider ───────────────────────────────────────────────────
 
     divider_ou = ft.Row(
         vertical_alignment=ft.CrossAxisAlignment.CENTER,
         controls=[
-            ft.Container(height=1.5, expand=True, bgcolor=C.BORDER),  # Linha mais grossa
+            ft.Container(height=1.5, expand=True, bgcolor=C.BORDER),
             ft.Container(
                 padding=ft.Padding(left=16, right=16, top=4, bottom=4),
                 content=ft.Text("ou", size=14, color=C.TEXT_MUTED, weight=ft.FontWeight.W_500),
@@ -426,150 +374,100 @@ def build_tela_auth(
         ],
     )
 
-    # ──────────────────────────────────────────────────────────────
-    #  LOGO — MAIOR
-    # ──────────────────────────────────────────────────────────────
+    # ── Logo ──────────────────────────────────────────────────────
 
-    logo = ft.Row(
-        alignment=ft.MainAxisAlignment.CENTER,
-        controls=[
-            ft.Column(
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=8,  # Aumentado
-                controls=[
-                    ft.Container(
-                        width=64, height=64,  # Aumentado de 52 para 64
-                        border_radius=16,
-                        bgcolor=C.ACCENT,
-                        alignment=ft.Alignment(0, 0),
-                        animate=ft.Animation(400, ft.AnimationCurve.BOUNCE_OUT),
-                        content=ft.Icon(
-                            ft.Icons.MOVIE_FILTER,
-                            color=C.BG, size=32,  # Ícone maior
-                        ),
-                    ),
-                    ft.Text(
-                        "CLIP ENGINE",
-                        size=16, weight=ft.FontWeight.W_900,  # Aumentado
-                        color=C.TEXT_PRIMARY, font_family="monospace",
-                        text_align=ft.TextAlign.CENTER,
-                    ),
-                    ft.Text(
-                        "Dev Orbit Tech",
-                        size=11, color=C.TEXT_MUTED,  # Aumentado
-                        text_align=ft.TextAlign.CENTER,
-                    ),
-                ],
-            ),
-        ],
-    )
-
-    # ──────────────────────────────────────────────────────────────
-    #  INICIALIZA O MODO
-    # ──────────────────────────────────────────────────────────────
-
-    _atualizar_modo()
-
-    # ──────────────────────────────────────────────────────────────
-    #  CARD PRINCIPAL — MAIOR E COM MAIS ESPAÇAMENTO
-    # ──────────────────────────────────────────────────────────────
-
-    card = ft.Container(
-        border_radius=28,  # Mais arredondado
-        bgcolor=C.SURFACE,
-        border=ft.Border.all(1.5, C.BORDER),  # Borda mais visível
-        padding=ft.Padding(left=32, right=32, top=40, bottom=40),  # Padding interno maior
-        animate=ft.Animation(300, ft.AnimationCurve.EASE_OUT),
+    logo = ft.Container(
         content=ft.Column(
-            spacing=20,  # Espaçamento entre elementos aumentado
-            scroll=ft.ScrollMode.AUTO,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            spacing=8,
             controls=[
-                # Logo
-                logo,
-
-                ft.Container(height=8),  # Espaço extra
-
-                # Título e subtítulo
-                ft.Column(
-                    spacing=8,  # Aumentado
-                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                    controls=[titulo, subtitulo],
+                ft.Container(
+                    width=64, height=64,
+                    border_radius=16,
+                    bgcolor=C.ACCENT,
+                    alignment=ft.Alignment(0, 0),
+                    animate=ft.Animation(400, ft.AnimationCurve.BOUNCE_OUT),
+                    content=ft.Icon(ft.Icons.MOVIE_FILTER, color=C.BG, size=32),
                 ),
-
-                ft.Container(height=8),
-
-                # Botão Google
-                ft.Row(controls=[btn_google]),
-
-                # Divider "ou"
-                divider_ou,
-
-                # Campos de entrada
-                campo_nome,
-                campo_email,
-                campo_senha,
-                campo_confirma,
-
-                # Mensagens
-                msg_erro,
-                msg_info,
-
-                loading,
-
-                # Animação de sucesso
-                icone_sucesso,
-
-                # Botão principal
-                ft.Row(controls=[btn_principal]),
-
-                # Botão alternar modo
-                ft.Row(
-                    alignment=ft.MainAxisAlignment.CENTER,
-                    controls=[btn_alternar],
-                ),
+                ft.Text("CLIP ENGINE", size=16, weight=ft.FontWeight.W_900,
+                    color=C.TEXT_PRIMARY, font_family="monospace",
+                    text_align=ft.TextAlign.CENTER),
+                ft.Text("Dev Orbit Tech", size=11, color=C.TEXT_MUTED,
+                    text_align=ft.TextAlign.CENTER),
             ],
         ),
     )
 
-    # ──────────────────────────────────────────────────────────────
-    #  LAYOUT FINAL — RESPONSIVO E CENTRALIZADO
-    #  • No celular: card ocupa quase toda largura
-    #  • No tablet: card com largura máxima de 500px
-    #  • No desktop: card com largura máxima de 550px
-    # ──────────────────────────────────────────────────────────────
+    # Inicializa modo
+    _atualizar_modo()
 
-    def get_card_width():
-        """Retorna largura responsiva baseada no tamanho da tela."""
-        if page.width < 600:  # Celular
-            return None  # Ocupa 100% com padding
-        elif page.width < 900:  # Tablet
-            return 500
-        else:  # Desktop
-            return 550
+    # ── Layout ────────────────────────────────────────────────────
 
-    # Atualiza largura do card quando a página for redimensionada
-    def on_page_resize(e=None):
-        card.width = get_card_width()
-        page.update()
+    form_content = ft.Column(
+        expand=True,
+        horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+        controls=[
+            ft.Container(expand=True),
+            ft.Column(
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=20,
+                controls=[
+                    logo,
+                    ft.Container(height=8),
+                    ft.Column(
+                        spacing=8,
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                        controls=[titulo, subtitulo],
+                    ),
+                    ft.Container(height=8),
+                    ft.Row(controls=[btn_google]),
+                    divider_ou,
+                    campo_nome,
+                    campo_email,
+                    campo_senha,
+                    campo_confirma,
+                    msg_erro,
+                    msg_info,
+                    loading,
+                    ft.Row(controls=[btn_principal]),
+                    ft.Row(
+                        alignment=ft.MainAxisAlignment.CENTER,
+                        controls=[btn_alternar],
+                    ),
+                ],
+            ),
+            ft.Container(expand=True),
+        ],
+    )
 
-    page.on_resize = on_page_resize
+    card = ft.Container(
+        expand=True,
+        border_radius=28,
+        bgcolor=C.SURFACE,
+        border=ft.Border(
+            left=ft.BorderSide(1.5, C.BORDER),
+            right=ft.BorderSide(1.5, C.BORDER),
+            top=ft.BorderSide(1.5, C.BORDER),
+            bottom=ft.BorderSide(1.5, C.BORDER),
+        ),
+        padding=ft.Padding(left=32, right=32, top=20, bottom=20),
+        animate=ft.Animation(300, ft.AnimationCurve.EASE_OUT),
+        content=form_content,
+    )
 
-    # Container principal que ocupa toda a tela
     return ft.Container(
         expand=True,
         bgcolor=C.BG,
         alignment=ft.Alignment(0, 0),
-        content=ft.ResponsiveRow(
+        content=ft.Column(
+            expand=True,
+            horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             controls=[
                 ft.Container(
-                    col={"xs": 12, "sm": 12, "md": 8, "lg": 6, "xl": 5},
-                    alignment=ft.Alignment(0, 0),
-                    padding=ft.Padding(left=24, right=24, top=32, bottom=32),  # Padding externo maior
+                    expand=True,
+                    padding=ft.Padding(left=24, right=24, top=24, bottom=24),
                     content=card,
                 ),
             ],
-            alignment=ft.MainAxisAlignment.CENTER,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-            expand=True,
         ),
     )
