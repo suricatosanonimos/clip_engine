@@ -6,49 +6,57 @@ on:
   workflow_dispatch:
 
 env:
-  # Força o uso do Node 24 para evitar os avisos de depreciação que você viu
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
-    # Adicionando a permissão de escrita que você solicitou
+
     permissions:
       contents: write
-    
+
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
-          java-version: '17'
+          distribution: zulu
+          java-version: "17"
 
-      - name: Install Dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install flet
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          if [ -f app/requirements.txt ]; then pip install -r app/requirements.txt; fi
+          
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
 
-      - name: Git Safe Directory
+          if [ -f app/requirements.txt ]; then
+            pip install -r app/requirements.txt
+          fi
+
+      - name: Configure Git Safe Directory
         run: git config --global --add safe.directory "*"
 
       - name: Build APK
         run: |
-          # O 'yes' responde automaticamente 'y' para a instalação do Flutter SDK 3.41.4
-          # Adicionei o argumento --no-interactive para garantir que o Flet não espere input
-          yes | flet build apk app/main.py --project "ClipEngine" --product "ClipEngineApp"
+          cd app
+          yes | flet build apk \
+            --module-name main \
+            --project "ClipEngine" \
+            --product "ClipEngineApp"
 
-      - name: Upload APK Artifact
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: clip-engine-apk
