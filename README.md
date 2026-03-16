@@ -172,6 +172,28 @@ cd ../app
 pip install flet==0.82.2 httpx==0.28.1
 ```
 
+## 📦 Dependências da API
+```bash
+pip install \
+  fastapi==0.133.0 \
+  uvicorn==0.41.0 \
+  python-multipart==0.0.22 \
+  python-dotenv==1.2.1 \
+  httpx==0.28.1 \
+  pydantic==2.12.5 \
+  pydantic-settings==2.13.1 \
+  slowapi==0.1.9 \
+  supabase==2.28.2 \
+  faster-whisper==1.2.1 \
+  mediapipe==0.10.9 \
+  opencv-contrib-python==4.13.0.92 \
+  moviepy==2.2.1 \
+  ffmpeg-python==0.2.0 \
+  yt-dlp==2026.2.21 \
+  openai==2.24.0
+```
+
+
 ### 4. Crie os buckets no Supabase
 
 No painel do Supabase → Storage → New bucket:
