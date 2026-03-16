@@ -17,7 +17,7 @@ from src.views.processing import build_aba_processamento
 from src.views.gallery    import build_aba_galeria
 
 
-DEV_MODE = False  # ← mude para False quando quiser reativar o login
+DEV_MODE = False
 
 
 def main(page: ft.Page):
@@ -55,7 +55,7 @@ def main(page: ft.Page):
         "token":     None,
     }
 
-    corpo      = ft.Container(expand=True, bgcolor=C.BG)
+    corpo       = ft.Container(expand=True, bgcolor=C.BG)
     usuario_txt = ft.Text("", size=11, color=C.TEXT_MUTED, font_family="monospace")
 
     def on_logout(e):
@@ -108,20 +108,18 @@ def main(page: ft.Page):
         ),
     )
 
-    # ── Ponte thread → loop principal (necessário no Android) ────────
-    _pendente = {"user": None, "token": None}
+    # ── Layout principal montado uma única vez ─────────────────────
+    # O corpo é um Stack: tela de login E app ficam no mesmo Stack.
+    # Trocamos visibilidade em vez de reconstruir o layout.
+    # Isso evita o problema de chamar page.add() de dentro de thread.
 
-    def _on_trigger_change(e):
-        if _pendente["user"] is not None:
-            _construir_app(_pendente["user"], _pendente["token"])
-            _pendente["user"]  = None
-            _pendente["token"] = None
+    tela_login_container = ft.Container(expand=True, visible=True)
+    tela_app_container   = ft.Container(expand=True, visible=False)
 
-    _trigger = ft.TextField(
-        visible=False,
-        on_change=_on_trigger_change,
+    corpo.content = ft.Stack(
+        expand=True,
+        controls=[tela_app_container, tela_login_container],
     )
-    page.overlay.append(_trigger)
 
     def _construir_app(user: dict, token: str = None):
         estado["user_info"] = user
@@ -173,7 +171,7 @@ def main(page: ft.Page):
             label_behavior=ft.NavigationBarLabelBehavior.ALWAYS_SHOW,
         )
 
-        corpo.content = ft.Column(
+        tela_app_container.content = ft.Column(
             spacing=0, expand=True,
             controls=[
                 conteudo_aba,
@@ -189,25 +187,27 @@ def main(page: ft.Page):
         label = nome if nome else email
         usuario_txt.value  = label[:22] + ("…" if len(label) > 22 else "")
         btn_logout.visible = True
+
+        # Troca visibilidade — NÃO reconstrói o layout da page
+        tela_login_container.visible = False
+        tela_app_container.visible   = True
         page.update()
 
     def _mostrar_login():
         btn_logout.visible = False
         usuario_txt.value  = ""
-        corpo.content = build_tela_auth(
+        tela_login_container.content = build_tela_auth(
             page=page,
             on_autenticado=_on_autenticado,
         )
+        tela_login_container.visible = True
+        tela_app_container.visible   = False
         page.update()
 
     def _on_autenticado(user: dict, token: str = None):
-        # No Android o Flet 0.82 exige que mudanças de layout
-        # sejam agendadas via page.update() + flag, não direto de thread.
-        # Usamos um Container invisível como "ponte" entre a thread e o loop principal.
-        _pendente["user"]  = user
-        _pendente["token"] = token
-        _trigger.value     = "ok"
-        _trigger.update()
+        # Chamado de dentro de thread do httpx.
+        # Troca visibilidade via container já na árvore — seguro no Android.
+        _construir_app(user, token)
 
     # ── Inicialização ──────────────────────────────────────────────
     page.add(
