@@ -44,8 +44,7 @@ jobs:
             --module-name main \
             --project "ClipEngine" \
             --product "Clip Engine" \
-            --org "com.devorbit.clipengine" \
-            --icon assets/icons/icon.png
+            --org "com.devorbit.clipengine"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
