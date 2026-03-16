@@ -17,7 +17,7 @@ from src.views.processing import build_aba_processamento
 from src.views.gallery    import build_aba_galeria
 
 
-DEV_MODE = True  # ← mude para False quando quiser reativar o login
+DEV_MODE = False  # ← mude para False quando quiser reativar o login
 
 
 def main(page: ft.Page):

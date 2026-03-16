@@ -14,15 +14,26 @@ from typing import Callable
 import flet as ft
 import httpx
 
+# ── ngrok: evita página de aviso do browser ──────────────────────
+_NGROK_HEADERS = {"ngrok-skip-browser-warning": "true"}
+
+
 from src.views.theme import C
 
-API_BASE_URL = "http://127.0.0.1:8000/api"
+API_BASE_URL = "https://perceptible-westin-checkable.ngrok-free.dev/api"
 
 
 def build_tela_auth(
     page: ft.Page,
     on_autenticado: Callable,       # on_autenticado(user: dict, token: str)
 ) -> ft.Control:
+
+    try:
+        page.padding = ft.padding.only(
+            top=ft.SafeCast(page).top if hasattr(page, "safe_area") else 40
+        )
+    except:
+        page.padding = ft.padding.only(top=40)
 
     _modo = {"valor": "login"}
 
@@ -243,7 +254,7 @@ def build_tela_auth(
             return
 
         try:
-            with httpx.Client(timeout=30.0) as client:
+            with httpx.Client(timeout=30.0, headers=_NGROK_HEADERS) as client:
                 resp = client.post(
                     f"{API_BASE_URL}/auth/login",
                     json={"email": email, "senha": senha},
@@ -293,7 +304,7 @@ def build_tela_auth(
             return
 
         try:
-            with httpx.Client(timeout=30.0) as client:
+            with httpx.Client(timeout=30.0, headers=_NGROK_HEADERS) as client:
                 resp = client.post(
                     f"{API_BASE_URL}/auth/register",
                     json={"nome": nome, "email": email, "senha": senha},
@@ -331,7 +342,7 @@ def build_tela_auth(
 
     def _login_google(e):
         try:
-            with httpx.Client(timeout=10.0) as client:
+            with httpx.Client(timeout=10.0, headers=_NGROK_HEADERS) as client:
                 resp = client.post(f"{API_BASE_URL}/auth/google")
             if resp.status_code == 200:
                 url = resp.json().get("url")

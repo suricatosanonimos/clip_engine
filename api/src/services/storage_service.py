@@ -6,21 +6,135 @@ Responsável por:
   2. Registrar cada clipe na tabela public.clips
   3. Atualizar o status do job na tabela public.jobs
   4. Gerar URL assinada (7 dias) para download pelo app
+
+FIX: upload via httpx direto com timeout longo (10 min) para
+     arquivos grandes (40–200 MB), contornando o timeout padrão
+     do SDK supabase-py que estoura em ~60s.
 """
 
 import mimetypes
+import os
 from pathlib import Path
 from typing import List, Optional
 
-from src.database.supabase_client import get_supabase_admin_client
+import httpx
+
+from src.database.supabase_client import (
+    SUPABASE_URL,
+    SUPABASE_SERVICE_KEY,
+    SUPABASE_ANON_KEY,
+    get_supabase_admin_client,
+)
 from src.utils.logs import logger
 
 # URL assinada válida por 7 dias
 SIGNED_URL_EXPIRES = 60 * 60 * 24 * 7
 
+# Timeout para uploads grandes (10 minutos)
+_UPLOAD_TIMEOUT = httpx.Timeout(
+    connect=30,
+    read=600,
+    write=600,
+    pool=30,
+)
+
+# Tamanho de chunk para leitura do arquivo (4 MB)
+_CHUNK_SIZE = 4 * 1024 * 1024
+
+
+def _get_service_key() -> str:
+    """Retorna a service role key ou anon key como fallback."""
+    return SUPABASE_SERVICE_KEY or SUPABASE_ANON_KEY
+
 
 # ──────────────────────────────────────────────────────────────────
-#  UPLOAD DE UM CLIPE
+#  UPLOAD DIRETO VIA HTTPX (contorna timeout do SDK)
+# ──────────────────────────────────────────────────────────────────
+
+def _upload_via_httpx(
+    clip_path: Path,
+    storage_path: str,
+    mime_type: str,
+    bucket: str = "clips",
+) -> bool:
+    """
+    Faz upload direto para a API REST do Supabase Storage via httpx,
+    com timeout de 10 minutos — adequado para arquivos de até ~500 MB.
+    Retorna True se bem-sucedido, False caso contrário.
+    """
+    url     = f"{SUPABASE_URL}/storage/v1/object/{bucket}/{storage_path}"
+    headers = {
+        "Authorization": f"Bearer {_get_service_key()}",
+        "Content-Type":  mime_type,
+        "Cache-Control": "3600",
+        "x-upsert":      "true",
+    }
+
+    try:
+        file_size = clip_path.stat().st_size
+        logger.info(
+            f"Iniciando upload httpx: {clip_path.name} "
+            f"({file_size / (1024*1024):.1f} MB) → {bucket}/{storage_path}"
+        )
+
+        with open(clip_path, "rb") as f:
+            with httpx.Client(timeout=_UPLOAD_TIMEOUT) as client:
+                resp = client.put(url, content=f.read(), headers=headers)
+
+        if resp.status_code in (200, 201):
+            logger.info(f"Upload OK ({resp.status_code}): {storage_path}")
+            return True
+        else:
+            logger.error(
+                f"Upload falhou {resp.status_code}: {resp.text[:200]}"
+            )
+            return False
+
+    except httpx.TimeoutException as e:
+        logger.error(f"Timeout no upload de {clip_path.name}: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Erro no upload de {clip_path.name}: {e}")
+        return False
+
+
+# ──────────────────────────────────────────────────────────────────
+#  GERAR SIGNED URL
+# ──────────────────────────────────────────────────────────────────
+
+def _gerar_signed_url(storage_path: str, bucket: str = "clips") -> str:
+    """
+    Gera uma URL assinada válida por 7 dias via API REST do Supabase.
+    Retorna a URL ou string vazia em caso de falha.
+    """
+    url     = f"{SUPABASE_URL}/storage/v1/object/sign/{bucket}/{storage_path}"
+    headers = {
+        "Authorization": f"Bearer {_get_service_key()}",
+        "Content-Type":  "application/json",
+    }
+    try:
+        with httpx.Client(timeout=httpx.Timeout(30)) as client:
+            resp = client.post(url, json={"expiresIn": SIGNED_URL_EXPIRES}, headers=headers)
+
+        if resp.status_code == 200:
+            data       = resp.json()
+            signed_url = data.get("signedURL") or data.get("signedUrl", "")
+            if signed_url and not signed_url.startswith("http"):
+                signed_url = f"{SUPABASE_URL}/storage/v1{signed_url}"
+            logger.info(f"Signed URL gerada: {storage_path}")
+            return signed_url
+        else:
+            logger.warning(
+                f"Falha ao gerar signed URL ({resp.status_code}): {resp.text[:100]}"
+            )
+            return ""
+    except Exception as e:
+        logger.warning(f"Erro ao gerar signed URL: {e}")
+        return ""
+
+
+# ──────────────────────────────────────────────────────────────────
+#  UPLOAD DE UM CLIPE (interface pública)
 # ──────────────────────────────────────────────────────────────────
 
 def upload_clipe_storage(
@@ -37,35 +151,16 @@ def upload_clipe_storage(
         logger.error(f"Clipe não encontrado: {clip_path}")
         return None
 
-    client       = get_supabase_admin_client()
     storage_path = f"{user_id}/{job_id}/{clip_path.name}"
     mime_type    = mimetypes.guess_type(str(clip_path))[0] or "video/mp4"
 
-    try:
-        with open(clip_path, "rb") as f:
-            client.storage.from_("clips").upload(
-                path=storage_path,
-                file=f,
-                file_options={
-                    "content-type":  mime_type,
-                    "cache-control": "3600",
-                    "upsert":        "true",
-                },
-            )
-        logger.info(f"Upload OK → {storage_path}")
-    except Exception as e:
-        logger.error(f"Erro no upload de {clip_path.name}: {e}")
+    # Upload via httpx direto (timeout longo)
+    ok = _upload_via_httpx(clip_path, storage_path, mime_type, bucket="clips")
+    if not ok:
         return None
 
-    # Gera URL assinada
-    try:
-        resp       = client.storage.from_("clips").create_signed_url(
-            storage_path, SIGNED_URL_EXPIRES
-        )
-        signed_url = resp.get("signedURL") or resp.get("signed_url", "")
-    except Exception as e:
-        logger.warning(f"Não foi possível gerar signed URL: {e}")
-        signed_url = ""
+    # Gera signed URL
+    signed_url = _gerar_signed_url(storage_path, bucket="clips")
 
     return {"storage_path": storage_path, "signed_url": signed_url}
 
@@ -103,7 +198,7 @@ def registrar_clip_banco(
             "motivo":       motivo or "Clipe gerado automaticamente.",
         }).execute()
         clip_id = resp.data[0]["id"] if resp.data else None
-        logger.info(f"Clip registrado: {clip_id}")
+        logger.info(f"Clip registrado no banco: {clip_id}")
         return clip_id
     except Exception as e:
         logger.error(f"Erro ao registrar clip no banco: {e}")
@@ -152,7 +247,7 @@ def processar_e_salvar_clips(
 ) -> list:
     """
     Itera sobre os clipes gerados pelo VideoProcessor:
-      - Upload para Supabase Storage
+      - Upload para Supabase Storage (via httpx, timeout 10 min)
       - Registro na tabela clips
       - Retorna lista de dicts para ClipResult
 
@@ -178,7 +273,7 @@ def processar_e_salvar_clips(
             task_id,
             status=TaskStatus.ANALYZING,
             progress=progresso,
-            message=f"Salvando clipe {i}/{total} na nuvem...",
+            message=f"Enviando clipe {i}/{total} para a nuvem... ({size_mb:.0f} MB)",
         )
 
         # 1. Upload para Storage

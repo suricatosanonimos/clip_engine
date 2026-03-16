@@ -414,7 +414,7 @@ class VideoProcessor:
             self.ffmpeg,
             "-ss", str(start), "-i", str(video_path), "-t", str(duration),
             "-vf", crop_filter,
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
             "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
             "-y", str(output),
         ]

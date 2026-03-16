@@ -117,7 +117,7 @@ def _etapa_legendas(
     Retorna lista de Paths dos clipes finais (com ou sem legenda).
     """
     try:
-        from src.controllers.services.transcriber import SubtitleGenerator
+        from src.services.transcriber import SubtitleGenerator
         gen = SubtitleGenerator(cor_legenda=cor_legenda)
     except Exception as e:
         logger.warning(f"[{task_id}] SubtitleGenerator não disponível: {e}")

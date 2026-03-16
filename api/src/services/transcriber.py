@@ -258,7 +258,7 @@ Style: Default,Impact,{font_size},{self.cor_primary},&H000000FF,{self.COLORS['bl
     # ── Parâmetros FFmpeg ──────────────────────────────────────────
 
     def _get_ffmpeg_params(self) -> List[str]:
-        base = ["-preset", "ultrafast", "-crf", "18"]
+        base = ["-preset", "fast", "-crf", "23"]
         if self.use_gpu:
             try:
                 return ["-c:v", "h264_qsv", "-preset", "veryfast", "-crf", "18"]
