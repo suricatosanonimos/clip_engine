@@ -116,10 +116,45 @@ cd clip_engine
 ### 2. Configure a API
 
 ```bash
-cd api
-python3.11 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+# ══════════════════════════════════════════════════════════════
+#  CLIP ENGINE — .env
+#  Copie este arquivo para api/.env e preencha com seus dados
+#  NUNCA commite o .env real no repositório
+# ══════════════════════════════════════════════════════════════
+
+# ── Servidor ──────────────────────────────────────────────────
+INITIALIZE_MODE="DEVELOPMENT_MODE"
+PORT=8000
+HOST="0.0.0.0"
+ENVIRONMENT="development"
+
+# ── Groq API (opcional — para funcionalidades de IA extra) ────
+GLOK_API="gsk_SUA_CHAVE_GROQ_AQUI"
+
+# ── Supabase ──────────────────────────────────────────────────
+# Encontre em: app.supabase.com → seu projeto → Settings → API
+SUPABASE_URL="https://SEU_PROJECT_ID.supabase.co"
+SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.SEU_ANON_KEY_AQUI"
+SUPABASE_SERVICE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.SEU_SERVICE_ROLE_KEY_AQUI"
+
+# ── Banco PostgreSQL direto (opcional) ────────────────────────
+# Encontre em: Settings → Database → Database Settings → Password
+SUPABASE_PROJECT_ID="SEU_PROJECT_ID"
+SUPABASE_DB_HOST="db.SEU_PROJECT_ID.supabase.co"
+SUPABASE_DB_PORT="5432"
+SUPABASE_DB_USER="postgres"
+SUPABASE_DB_NAME="postgres"
+SUPABASE_DB_PASSWORD="SUA_SENHA_DO_BANCO"
+
+# ── OAuth (ajuste para seu domínio em produção) ───────────────
+GOOGLE_REDIRECT_URL="http://localhost:8000/auth/google/callback"
+RESET_PASSWORD_URL="http://localhost:8000/auth/reset-password-callback"
+```
+
+Adicione também ao `.gitignore` se ainda não tiver:
+```
+.env
+*.env
 ```
 
 Crie o arquivo `.env` na pasta `api/`:
