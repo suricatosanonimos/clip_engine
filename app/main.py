@@ -108,6 +108,21 @@ def main(page: ft.Page):
         ),
     )
 
+    # ── Ponte thread → loop principal (necessário no Android) ────────
+    _pendente = {"user": None, "token": None}
+
+    def _on_trigger_change(e):
+        if _pendente["user"] is not None:
+            _construir_app(_pendente["user"], _pendente["token"])
+            _pendente["user"]  = None
+            _pendente["token"] = None
+
+    _trigger = ft.TextField(
+        visible=False,
+        on_change=_on_trigger_change,
+    )
+    page.overlay.append(_trigger)
+
     def _construir_app(user: dict, token: str = None):
         estado["user_info"] = user
         estado["token"]     = token
@@ -186,7 +201,13 @@ def main(page: ft.Page):
         page.update()
 
     def _on_autenticado(user: dict, token: str = None):
-        _construir_app(user, token)
+        # No Android o Flet 0.82 exige que mudanças de layout
+        # sejam agendadas via page.update() + flag, não direto de thread.
+        # Usamos um Container invisível como "ponte" entre a thread e o loop principal.
+        _pendente["user"]  = user
+        _pendente["token"] = token
+        _trigger.value     = "ok"
+        _trigger.update()
 
     # ── Inicialização ──────────────────────────────────────────────
     page.add(
