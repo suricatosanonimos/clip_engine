@@ -1,0 +1,59 @@
+<svg viewBox="0 0 900 160" xmlns="http://www.w3.org/2000/svg" font-family="'Courier New', monospace">
+  <rect width="900" height="160" fill="#0d1117" rx="12"/>
+  <rect width="900" height="160" fill="none" stroke="#30363d" stroke-width="1" rx="12"/>
+
+  <text x="450" y="28" text-anchor="middle" fill="#8b949e" font-size="11" font-weight="bold" letter-spacing="3">STACK TECNOLÓGICO</text>
+
+  <!-- Col 1: App -->
+  <text x="90" y="55" text-anchor="middle" fill="#FF6B00" font-size="9" font-weight="bold">APP MOBILE</text>
+  <rect x="20" y="62" width="140" height="22" rx="4" fill="#1f2937" stroke="#374151" stroke-width="1"/>
+  <text x="90" y="77" text-anchor="middle" fill="#e2e8f0" font-size="9">Flet 0.82 (Python)</text>
+  <rect x="20" y="88" width="140" height="22" rx="4" fill="#1f2937" stroke="#374151" stroke-width="1"/>
+  <text x="90" y="103" text-anchor="middle" fill="#e2e8f0" font-size="9">httpx · threading</text>
+  <rect x="20" y="114" width="140" height="22" rx="4" fill="#1f2937" stroke="#374151" stroke-width="1"/>
+  <text x="90" y="129" text-anchor="middle" fill="#e2e8f0" font-size="9">Android APK · Desktop</text>
+
+  <line x1="170" y1="80" x2="190" y2="80" stroke="#30363d" stroke-width="1" stroke-dasharray="3,2"/>
+
+  <!-- Col 2: API -->
+  <text x="278" y="55" text-anchor="middle" fill="#58a6ff" font-size="9" font-weight="bold">API BACKEND</text>
+  <rect x="200" y="62" width="155" height="22" rx="4" fill="#1f2937" stroke="#374151" stroke-width="1"/>
+  <text x="278" y="77" text-anchor="middle" fill="#e2e8f0" font-size="9">FastAPI · Uvicorn</text>
+  <rect x="200" y="88" width="155" height="22" rx="4" fill="#1f2937" stroke="#374151" stroke-width="1"/>
+  <text x="278" y="103" text-anchor="middle" fill="#e2e8f0" font-size="9">SlowAPI · SSE stream</text>
+  <rect x="200" y="114" width="155" height="22" rx="4" fill="#1f2937" stroke="#374151" stroke-width="1"/>
+  <text x="278" y="129" text-anchor="middle" fill="#e2e8f0" font-size="9">Python 3.11 · ngrok</text>
+
+  <line x1="360" y1="80" x2="380" y2="80" stroke="#30363d" stroke-width="1" stroke-dasharray="3,2"/>
+
+  <!-- Col 3: IA -->
+  <text x="468" y="55" text-anchor="middle" fill="#d29922" font-size="9" font-weight="bold">INTELIGÊNCIA ARTIFICIAL</text>
+  <rect x="385" y="62" width="165" height="22" rx="4" fill="#1f2937" stroke="#374151" stroke-width="1"/>
+  <text x="468" y="77" text-anchor="middle" fill="#e2e8f0" font-size="9">MediaPipe (face tracking)</text>
+  <rect x="385" y="88" width="165" height="22" rx="4" fill="#1f2937" stroke="#374151" stroke-width="1"/>
+  <text x="468" y="103" text-anchor="middle" fill="#e2e8f0" font-size="9">faster-whisper (tiny, OFFLINE)</text>
+  <rect x="385" y="114" width="165" height="22" rx="4" fill="#1f2937" stroke="#374151" stroke-width="1"/>
+  <text x="468" y="129" text-anchor="middle" fill="#e2e8f0" font-size="9">FFmpeg CRF23 · OpenCV</text>
+
+  <line x1="555" y1="80" x2="575" y2="80" stroke="#30363d" stroke-width="1" stroke-dasharray="3,2"/>
+
+  <!-- Col 4: Cloud -->
+  <text x="665" y="55" text-anchor="middle" fill="#3fb950" font-size="9" font-weight="bold">CLOUD / INFRA</text>
+  <rect x="580" y="62" width="170" height="22" rx="4" fill="#1f2937" stroke="#374151" stroke-width="1"/>
+  <text x="665" y="77" text-anchor="middle" fill="#e2e8f0" font-size="9">Supabase Auth + DB + Storage</text>
+  <rect x="580" y="88" width="170" height="22" rx="4" fill="#1f2937" stroke="#374151" stroke-width="1"/>
+  <text x="665" y="103" text-anchor="middle" fill="#e2e8f0" font-size="9">Signed URL 7 dias</text>
+  <rect x="580" y="114" width="170" height="22" rx="4" fill="#1f2937" stroke="#374151" stroke-width="1"/>
+  <text x="665" y="129" text-anchor="middle" fill="#e2e8f0" font-size="9">GitHub Actions · APK build</text>
+
+  <line x1="755" y1="80" x2="775" y2="80" stroke="#30363d" stroke-width="1" stroke-dasharray="3,2"/>
+
+  <!-- Col 5: Deploy -->
+  <text x="838" y="55" text-anchor="middle" fill="#bc8cff" font-size="9" font-weight="bold">DEPLOY</text>
+  <rect x="780" y="62" width="100" height="22" rx="4" fill="#1f2937" stroke="#374151" stroke-width="1"/>
+  <text x="830" y="77" text-anchor="middle" fill="#e2e8f0" font-size="9">ngrok free</text>
+  <rect x="780" y="88" width="100" height="22" rx="4" fill="#1f2937" stroke="#374151" stroke-width="1"/>
+  <text x="830" y="103" text-anchor="middle" fill="#e2e8f0" font-size="9">systemd</text>
+  <rect x="780" y="114" width="100" height="22" rx="4" fill="#1f2937" stroke="#374151" stroke-width="1"/>
+  <text x="830" y="129" text-anchor="middle" fill="#e2e8f0" font-size="9">Ubuntu 24.04</text>
+</svg>

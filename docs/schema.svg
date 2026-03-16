@@ -1,0 +1,63 @@
+<svg viewBox="0 0 700 260" xmlns="http://www.w3.org/2000/svg" font-family="'Courier New', monospace">
+  <rect width="700" height="260" fill="#0d1117" rx="12"/>
+  <rect width="700" height="260" fill="none" stroke="#30363d" stroke-width="1" rx="12"/>
+
+  <text x="350" y="28" text-anchor="middle" fill="#3fb950" font-size="12" font-weight="bold" letter-spacing="3">SCHEMA — SUPABASE</text>
+
+  <!-- users (auth) -->
+  <rect x="30" y="50" width="160" height="155" rx="8" fill="#161b22" stroke="#8b949e" stroke-width="1.5"/>
+  <rect x="30" y="50" width="160" height="26" rx="8" fill="#21262d"/>
+  <rect x="30" y="64" width="160" height="12" rx="0" fill="#21262d"/>
+  <text x="110" y="68" text-anchor="middle" fill="#8b949e" font-size="10" font-weight="bold">auth.users</text>
+  <line x1="30" y1="76" x2="190" y2="76" stroke="#30363d" stroke-width="1"/>
+  <text x="45" y="92" fill="#f0883e" font-size="8">🔑 id</text><text x="155" y="92" text-anchor="end" fill="#6b7280" font-size="8">uuid PK</text>
+  <text x="45" y="108" fill="#6b7280" font-size="8">email</text><text x="155" y="108" text-anchor="end" fill="#6b7280" font-size="8">text</text>
+  <text x="45" y="124" fill="#6b7280" font-size="8">full_name</text><text x="155" y="124" text-anchor="end" fill="#6b7280" font-size="8">text</text>
+  <text x="45" y="140" fill="#6b7280" font-size="8">created_at</text><text x="155" y="140" text-anchor="end" fill="#6b7280" font-size="8">timestamptz</text>
+  <text x="45" y="156" fill="#6b7280" font-size="8">avatar_url</text><text x="155" y="156" text-anchor="end" fill="#6b7280" font-size="8">text</text>
+  <text x="110" y="196" text-anchor="middle" fill="#3d4451" font-size="7">Supabase Auth</text>
+
+  <!-- Arrow users -> jobs -->
+  <line x1="190" y1="120" x2="240" y2="120" stroke="#30363d" stroke-width="1.5" stroke-dasharray="4,2"/>
+  <circle cx="240" cy="120" r="3" fill="#8b949e"/>
+
+  <!-- jobs -->
+  <rect x="243" y="50" width="185" height="185" rx="8" fill="#161b22" stroke="#FF6B00" stroke-width="1.5"/>
+  <rect x="243" y="50" width="185" height="26" rx="8" fill="#FF6B00" opacity="0.1"/>
+  <rect x="243" y="64" width="185" height="12" rx="0" fill="#FF6B00" opacity="0.1"/>
+  <text x="335" y="68" text-anchor="middle" fill="#FF6B00" font-size="10" font-weight="bold">public.jobs</text>
+  <line x1="243" y1="76" x2="428" y2="76" stroke="#FF6B00" stroke-width="1" opacity="0.4"/>
+  <text x="258" y="92" fill="#f0883e" font-size="8">🔑 id</text><text x="420" y="92" text-anchor="end" fill="#6b7280" font-size="8">uuid PK</text>
+  <text x="258" y="108" fill="#79c0ff" font-size="8">🔗 user_id</text><text x="420" y="108" text-anchor="end" fill="#6b7280" font-size="8">uuid FK</text>
+  <text x="258" y="124" fill="#6b7280" font-size="8">status</text><text x="420" y="124" text-anchor="end" fill="#6b7280" font-size="8">text</text>
+  <text x="258" y="140" fill="#6b7280" font-size="8">source_type</text><text x="420" y="140" text-anchor="end" fill="#6b7280" font-size="8">text</text>
+  <text x="258" y="156" fill="#6b7280" font-size="8">source_url</text><text x="420" y="156" text-anchor="end" fill="#6b7280" font-size="8">text</text>
+  <text x="258" y="172" fill="#6b7280" font-size="8">progress</text><text x="420" y="172" text-anchor="end" fill="#6b7280" font-size="8">float 0–100</text>
+  <text x="258" y="188" fill="#6b7280" font-size="8">num_clips · tracking</text><text x="420" y="188" text-anchor="end" fill="#6b7280" font-size="8">int · bool</text>
+  <text x="258" y="204" fill="#6b7280" font-size="8">video_title · message</text><text x="420" y="204" text-anchor="end" fill="#6b7280" font-size="8">text</text>
+  <text x="258" y="220" fill="#6b7280" font-size="8">created_at</text><text x="420" y="220" text-anchor="end" fill="#6b7280" font-size="8">timestamptz</text>
+
+  <!-- Arrow jobs -> clips -->
+  <line x1="428" y1="140" x2="468" y2="140" stroke="#30363d" stroke-width="1.5" stroke-dasharray="4,2"/>
+  <circle cx="468" cy="140" r="3" fill="#3fb950"/>
+
+  <!-- clips -->
+  <rect x="471" y="50" width="195" height="185" rx="8" fill="#161b22" stroke="#3fb950" stroke-width="1.5"/>
+  <rect x="471" y="50" width="195" height="26" rx="8" fill="#3fb950" opacity="0.1"/>
+  <rect x="471" y="64" width="195" height="12" rx="0" fill="#3fb950" opacity="0.1"/>
+  <text x="568" y="68" text-anchor="middle" fill="#3fb950" font-size="10" font-weight="bold">public.clips</text>
+  <line x1="471" y1="76" x2="666" y2="76" stroke="#3fb950" stroke-width="1" opacity="0.4"/>
+  <text x="486" y="92" fill="#f0883e" font-size="8">🔑 id</text><text x="658" y="92" text-anchor="end" fill="#6b7280" font-size="8">uuid PK</text>
+  <text x="486" y="108" fill="#79c0ff" font-size="8">🔗 job_id</text><text x="658" y="108" text-anchor="end" fill="#6b7280" font-size="8">uuid FK</text>
+  <text x="486" y="124" fill="#79c0ff" font-size="8">🔗 user_id</text><text x="658" y="124" text-anchor="end" fill="#6b7280" font-size="8">uuid FK</text>
+  <text x="486" y="140" fill="#6b7280" font-size="8">filename</text><text x="658" y="140" text-anchor="end" fill="#6b7280" font-size="8">text</text>
+  <text x="486" y="156" fill="#6b7280" font-size="8">storage_path</text><text x="658" y="156" text-anchor="end" fill="#6b7280" font-size="8">text</text>
+  <text x="486" y="172" fill="#6b7280" font-size="8">public_url</text><text x="658" y="172" text-anchor="end" fill="#6b7280" font-size="8">text (signed)</text>
+  <text x="486" y="188" fill="#6b7280" font-size="8">size_mb · clip_index</text><text x="658" y="188" text-anchor="end" fill="#6b7280" font-size="8">float · int</text>
+  <text x="486" y="204" fill="#6b7280" font-size="8">score · motivo</text><text x="658" y="204" text-anchor="end" fill="#6b7280" font-size="8">float · text</text>
+  <text x="486" y="220" fill="#6b7280" font-size="8">created_at</text><text x="658" y="220" text-anchor="end" fill="#6b7280" font-size="8">timestamptz</text>
+
+  <!-- FK labels -->
+  <text x="215" y="115" text-anchor="middle" fill="#30363d" font-size="7">FK</text>
+  <text x="448" y="135" text-anchor="middle" fill="#30363d" font-size="7">FK</text>
+</svg>
