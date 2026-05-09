@@ -46,12 +46,7 @@ Tudo acontece automaticamente: o app envia a URL ou o vídeo, a API processa com
 ## 🎬 Resultados
 
 <!-- BEGIN YOUTUBE-CARDS -->
-[![SE você ESTA CONFUSO VEJA ESSE VIDEO #motivação](https://ytcards.demolab.com/?id=NRN5rjaphgM&title=SE+voc%C3%AA+ESTA+CONFUSO+VEJA+ESSE+VIDEO+%23motiva%C3%A7%C3%A3o&lang=en&timestamp=1773585015&background_color=%230d1117&title_color=%23ffffff&stats_color=%23dedede&max_title_lines=1&width=250&border_radius=5 "SE você ESTA CONFUSO VEJA ESSE VIDEO #motivação")](https://www.youtube.com/shorts/NRN5rjaphgM)
-[![ONDE ESTÀ O RESTANTE DO DINHEIRO DO BLUZEIRA ?](https://ytcards.demolab.com/?id=e7RqpPVQ0mg&title=ONDE+EST%C3%80+O+RESTANTE+DO+DINHEIRO+DO+BLUZEIRA+%3F&lang=en&timestamp=1773337454&background_color=%230d1117&title_color=%23ffffff&stats_color=%23dedede&max_title_lines=1&width=250&border_radius=5 "ONDE ESTÀ O RESTANTE DO DINHEIRO DO BLUZEIRA ?")](https://www.youtube.com/shorts/e7RqpPVQ0mg)
-[![BLUZEIA NÃO QUIS ABRIR A PORTA](https://ytcards.demolab.com/?id=-r2U_PGeILk&title=BLUZEIA+N%C3%83O+QUIS+ABRIR+A+PORTA&lang=en&timestamp=1773271581&background_color=%230d1117&title_color=%23ffffff&stats_color=%23dedede&max_title_lines=1&width=250&border_radius=5 "BLUZEIA NÃO QUIS ABRIR A PORTA")](https://www.youtube.com/shorts/-r2U_PGeILk)
-[![COMO A IA MOVIMENTA BILHÕES E VOCÊ NEM IMAGINA](https://ytcards.demolab.com/?id=VzWNptoU3bY&title=COMO+A+IA+MOVIMENTA+BILH%C3%95ES+E+VOC%C3%8A+NEM+IMAGINA&lang=en&timestamp=1773201238&background_color=%230d1117&title_color=%23ffffff&stats_color=%23dedede&max_title_lines=1&width=250&border_radius=5 "COMO A IA MOVIMENTA BILHÕES E VOCÊ NEM IMAGINA")](https://www.youtube.com/shorts/VzWNptoU3bY)
-[![A Loirinha Da Odonto Tá Na Maldade ( Nobru vlogs )](https://ytcards.demolab.com/?id=x-rsuYYfk0Y&title=A+Loirinha+Da+Odonto+T%C3%A1+Na+Maldade+%28+Nobru+vlogs+%29&lang=en&timestamp=1773153906&background_color=%230d1117&title_color=%23ffffff&stats_color=%23dedede&max_title_lines=1&width=250&border_radius=5 "A Loirinha Da Odonto Tá Na Maldade ( Nobru vlogs )")](https://www.youtube.com/shorts/x-rsuYYfk0Y)
-[![PROGRAMADOR APOSENTADO CRIA ALGO INCRÍVEL](https://ytcards.demolab.com/?id=OU_kph4x3ac&title=PROGRAMADOR+APOSENTADO+CRIA+ALGO+INCR%C3%8DVEL&lang=en&timestamp=1773100613&background_color=%230d1117&title_color=%23ffffff&stats_color=%23dedede&max_title_lines=1&width=250&border_radius=5 "PROGRAMADOR APOSENTADO CRIA ALGO INCRÍVEL")](https://www.youtube.com/shorts/OU_kph4x3ac)
+
 <!-- END YOUTUBE-CARDS -->
 
 ---
