@@ -18,11 +18,10 @@ from pathlib import Path
 from typing import List, Optional
 
 import httpx
-
 from src.database.supabase_client import (
-    SUPABASE_URL,
-    SUPABASE_SERVICE_KEY,
     SUPABASE_ANON_KEY,
+    SUPABASE_SERVICE_KEY,
+    SUPABASE_URL,
     get_supabase_admin_client,
 )
 from src.utils.logs import logger
@@ -51,6 +50,7 @@ def _get_service_key() -> str:
 #  UPLOAD DIRETO VIA HTTPX (contorna timeout do SDK)
 # ──────────────────────────────────────────────────────────────────
 
+
 def _upload_via_httpx(
     clip_path: Path,
     storage_path: str,
@@ -62,12 +62,12 @@ def _upload_via_httpx(
     com timeout de 10 minutos — adequado para arquivos de até ~500 MB.
     Retorna True se bem-sucedido, False caso contrário.
     """
-    url     = f"{SUPABASE_URL}/storage/v1/object/{bucket}/{storage_path}"
+    url = f"{SUPABASE_URL}/storage/v1/object/{bucket}/{storage_path}"
     headers = {
         "Authorization": f"Bearer {_get_service_key()}",
-        "Content-Type":  mime_type,
+        "Content-Type": mime_type,
         "Cache-Control": "3600",
-        "x-upsert":      "true",
+        "x-upsert": "true",
     }
 
     try:
@@ -85,9 +85,7 @@ def _upload_via_httpx(
             logger.info(f"Upload OK ({resp.status_code}): {storage_path}")
             return True
         else:
-            logger.error(
-                f"Upload falhou {resp.status_code}: {resp.text[:200]}"
-            )
+            logger.error(f"Upload falhou {resp.status_code}: {resp.text[:200]}")
             return False
 
     except httpx.TimeoutException as e:
@@ -102,22 +100,25 @@ def _upload_via_httpx(
 #  GERAR SIGNED URL
 # ──────────────────────────────────────────────────────────────────
 
+
 def _gerar_signed_url(storage_path: str, bucket: str = "clips") -> str:
     """
     Gera uma URL assinada válida por 7 dias via API REST do Supabase.
     Retorna a URL ou string vazia em caso de falha.
     """
-    url     = f"{SUPABASE_URL}/storage/v1/object/sign/{bucket}/{storage_path}"
+    url = f"{SUPABASE_URL}/storage/v1/object/sign/{bucket}/{storage_path}"
     headers = {
         "Authorization": f"Bearer {_get_service_key()}",
-        "Content-Type":  "application/json",
+        "Content-Type": "application/json",
     }
     try:
         with httpx.Client(timeout=httpx.Timeout(30)) as client:
-            resp = client.post(url, json={"expiresIn": SIGNED_URL_EXPIRES}, headers=headers)
+            resp = client.post(
+                url, json={"expiresIn": SIGNED_URL_EXPIRES}, headers=headers
+            )
 
         if resp.status_code == 200:
-            data       = resp.json()
+            data = resp.json()
             signed_url = data.get("signedURL") or data.get("signedUrl", "")
             if signed_url and not signed_url.startswith("http"):
                 signed_url = f"{SUPABASE_URL}/storage/v1{signed_url}"
@@ -137,6 +138,7 @@ def _gerar_signed_url(storage_path: str, bucket: str = "clips") -> str:
 #  UPLOAD DE UM CLIPE (interface pública)
 # ──────────────────────────────────────────────────────────────────
 
+
 def upload_clipe_storage(
     clip_path: Path,
     user_id: str,
@@ -152,7 +154,7 @@ def upload_clipe_storage(
         return None
 
     storage_path = f"{user_id}/{job_id}/{clip_path.name}"
-    mime_type    = mimetypes.guess_type(str(clip_path))[0] or "video/mp4"
+    mime_type = mimetypes.guess_type(str(clip_path))[0] or "video/mp4"
 
     # Upload via httpx direto (timeout longo)
     ok = _upload_via_httpx(clip_path, storage_path, mime_type, bucket="clips")
@@ -168,6 +170,7 @@ def upload_clipe_storage(
 # ──────────────────────────────────────────────────────────────────
 #  REGISTRAR CLIPE NO BANCO
 # ──────────────────────────────────────────────────────────────────
+
 
 def registrar_clip_banco(
     user_id: str,
@@ -186,17 +189,23 @@ def registrar_clip_banco(
     """
     client = get_supabase_admin_client()
     try:
-        resp = client.table("clips").insert({
-            "user_id":      user_id,
-            "job_id":       job_id,
-            "clip_index":   clip_index,
-            "filename":     filename,
-            "storage_path": storage_path,
-            "public_url":   signed_url,
-            "size_mb":      round(size_mb, 2),
-            "score":        score,
-            "motivo":       motivo or "Clipe gerado automaticamente.",
-        }).execute()
+        resp = (
+            client.table("clips")
+            .insert(
+                {
+                    "user_id": user_id,
+                    "job_id": job_id,
+                    "clip_index": clip_index,
+                    "filename": filename,
+                    "storage_path": storage_path,
+                    "public_url": signed_url,
+                    "size_mb": round(size_mb, 2),
+                    "score": score,
+                    "motivo": motivo or "Clipe gerado automaticamente.",
+                }
+            )
+            .execute()
+        )
         clip_id = resp.data[0]["id"] if resp.data else None
         logger.info(f"Clip registrado no banco: {clip_id}")
         return clip_id
@@ -208,6 +217,7 @@ def registrar_clip_banco(
 # ──────────────────────────────────────────────────────────────────
 #  ATUALIZAR JOB
 # ──────────────────────────────────────────────────────────────────
+
 
 def atualizar_job_status(
     job_id: str,
@@ -221,9 +231,9 @@ def atualizar_job_status(
     client = get_supabase_admin_client()
     try:
         dados = {
-            "status":   status,
+            "status": status,
             "progress": round(progress * 100, 1),  # banco guarda 0–100
-            "message":  message,
+            "message": message,
         }
         if error:
             dados["error"] = error
@@ -239,6 +249,7 @@ def atualizar_job_status(
 #  PROCESSAR E SALVAR TODOS OS CLIPES
 # ──────────────────────────────────────────────────────────────────
 
+
 def processar_e_salvar_clips(
     clips_gerados: list,
     user_id: str,
@@ -253,11 +264,11 @@ def processar_e_salvar_clips(
 
     Clipes com falha no upload são pulados sem abortar o processo.
     """
-    from src.api.task_store import update_task
     from src.api.schemas import TaskStatus
+    from src.api.task_store import update_task
 
     resultados = []
-    total      = len(clips_gerados)
+    total = len(clips_gerados)
 
     for i, cp in enumerate(clips_gerados, start=1):
         cp = Path(cp)
@@ -293,16 +304,18 @@ def processar_e_salvar_clips(
             size_mb=size_mb,
         )
 
-        resultados.append({
-            "index":        i,
-            "clip_index":   i,
-            "filename":     cp.name,
-            "path":         str(cp),
-            "size_mb":      round(size_mb, 2),
-            "storage_path": resultado["storage_path"],
-            "public_url":   resultado["signed_url"],
-            "clip_id":      clip_id,
-        })
+        resultados.append(
+            {
+                "index": i,
+                "clip_index": i,
+                "filename": cp.name,
+                "path": str(cp),
+                "size_mb": round(size_mb, 2),
+                "storage_path": resultado["storage_path"],
+                "public_url": resultado["signed_url"],
+                "clip_id": clip_id,
+            }
+        )
 
     logger.info(f"[{task_id}] {len(resultados)}/{total} clipes salvos no Supabase.")
     return resultados

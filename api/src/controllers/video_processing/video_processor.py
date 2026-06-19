@@ -1,9 +1,10 @@
 import asyncio
 import bisect
 import json
+import random
+import shutil
 import subprocess
 import time
-import shutil
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -19,7 +20,7 @@ from .transcriber_video import TranscriberVideo
 # ──────────────────────────────────────────────────────────────────
 #  DIRETÓRIOS
 # ──────────────────────────────────────────────────────────────────
-ROOT_DIR      = Path(__file__).resolve().parent.parent.parent.parent
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
 DOWNLOADS_DIR = ROOT_DIR / "downloads"
 PROCESSED_DIR = ROOT_DIR / "processed_videos"
 RAW_CLIPS_DIR = PROCESSED_DIR / "raw_clips"
@@ -39,12 +40,16 @@ class FaceTrackerOptimized:
         self.faces_by_id: Dict[str, int] = {}
         self.next_id = 0
 
-    def add_or_update_face(self, face_id: str, center_x: int, center_y: int, area: float):
+    def add_or_update_face(
+        self, face_id: str, center_x: int, center_y: int, area: float
+    ):
         if face_id in self.faces_by_id:
             self._remove_face(face_id)
         self.faces[face_id] = {
-            "center_x": center_x, "center_y": center_y,
-            "area": area, "last_seen": time.time(),
+            "center_x": center_x,
+            "center_y": center_y,
+            "area": area,
+            "last_seen": time.time(),
         }
         self.face_positions[face_id].append(center_x)
         self.face_areas[face_id].append(area)
@@ -60,7 +65,7 @@ class FaceTrackerOptimized:
     def get_faces_in_x_range(self, min_x: int, max_x: int) -> List[str]:
         if not self.faces_by_position_x:
             return []
-        left  = bisect.bisect_left(self.faces_by_position_x,  (min_x, ""))
+        left = bisect.bisect_left(self.faces_by_position_x, (min_x, ""))
         right = bisect.bisect_right(self.faces_by_position_x, (max_x, ""))
         return [face_id for _, face_id in self.faces_by_position_x[left:right]]
 
@@ -69,7 +74,9 @@ class FaceTrackerOptimized:
             return []
         return [face_id for _, face_id in self.faces_by_area[-k:]]
 
-    def get_nearest_faces(self, target_x: int, target_y: int, radius: int) -> List[Tuple[str, float]]:
+    def get_nearest_faces(
+        self, target_x: int, target_y: int, radius: int
+    ) -> List[Tuple[str, float]]:
         candidates = []
         for face_id in self.get_faces_in_x_range(target_x - radius, target_x + radius):
             face = self.faces.get(face_id)
@@ -85,28 +92,39 @@ class FaceTrackerOptimized:
 
 class VideoProcessor:
     def __init__(self, num_shots: int = 10):
-        self.ffmpeg        = "ffmpeg"
-        self.ffprobe       = "ffprobe"
-        self.num_shots     = num_shots
-        self.in_dir        = DOWNLOADS_DIR
-        self.out_dir       = PROCESSED_DIR
-        self.raw_dir       = RAW_CLIPS_DIR
+        self.ffmpeg = "ffmpeg"
+        self.ffprobe = "ffprobe"
+        self.num_shots = num_shots
+        self.in_dir = DOWNLOADS_DIR
+        self.out_dir = PROCESSED_DIR
+        self.raw_dir = RAW_CLIPS_DIR
         self.clip_duration = 60
 
-        self.mp_face      = mp.solutions.face_detection
+        self.mp_face = mp.solutions.face_detection
         self.mp_face_mesh = mp.solutions.face_mesh
         self.face_detector = self.mp_face.FaceDetection(
-            model_selection=0, min_detection_confidence=0.5,
+            model_selection=0,
+            min_detection_confidence=0.5,
         )
         self.face_mesh = self.mp_face_mesh.FaceMesh(
-            max_num_faces=20, refine_landmarks=True,
-            min_detection_confidence=0.5, min_tracking_confidence=0.6,
+            max_num_faces=20,
+            refine_landmarks=True,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.6,
         )
-        self.next_face_id  = 0
+        self.next_face_id = 0
         self.min_face_area = 0.02
-        self.face_tracker  = FaceTrackerOptimized()
-        self._face_frequency:  Dict[str, int]   = defaultdict(int)
+        self.face_tracker = FaceTrackerOptimized()
+        self._face_frequency: Dict[str, int] = defaultdict(int)
         self._face_confidence: Dict[str, float] = defaultdict(float)
+        
+        # Inicializa variáveis da marca d'água móvel
+        self.fps = 30  # Valor padrão, será atualizado depois
+        self._watermark_frame_counter = 0
+        self._watermark_last_change = 0
+        self._watermark_pos_x = 0
+        self._watermark_pos_y = 0
+        self._watermark_pos_name = ""
 
     # ──────────────────────────────────────────────────────────────
     #  SAFETY NET — compatibilidade com OpenCV
@@ -128,29 +146,48 @@ class VideoProcessor:
         convertido = video_path.parent / f"{video_path.stem}_cv2.mp4"
 
         if convertido.exists() and convertido.stat().st_size > 0:
-            print(f"{time_for_logs()} ♻️  Reutilizando conversão existente: {convertido.name}")
+            print(
+                f"{time_for_logs()} ♻️  Reutilizando conversão existente: {convertido.name}"
+            )
             return convertido
 
-        print(f"{time_for_logs()} ⚠️  Codec incompatível com OpenCV ({video_path.suffix})")
+        print(
+            f"{time_for_logs()} ⚠️  Codec incompatível com OpenCV ({video_path.suffix})"
+        )
         print(f"{time_for_logs()} 🔄  Convertendo para H264 (safety net)...")
 
         cmd = [
             self.ffmpeg,
-            "-i",        str(video_path),
-            "-c:v",      "libx264",
-            "-preset",   "ultrafast",
-            "-crf",      "23",
-            "-pix_fmt",  "yuv420p",
-            "-c:a",      "aac",
-            "-b:a",      "128k",
-            "-movflags", "+faststart",
-            "-y",        str(convertido),
+            "-i",
+            str(video_path),
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            "-y",
+            str(convertido),
         ]
         result = subprocess.run(cmd, capture_output=True, text=True)
 
-        if result.returncode == 0 and convertido.exists() and convertido.stat().st_size > 0:
-            print(f"{time_for_logs()} ✅ Conversão OK: {convertido.name} "
-                  f"({convertido.stat().st_size / 1024 / 1024:.1f} MB)")
+        if (
+            result.returncode == 0
+            and convertido.exists()
+            and convertido.stat().st_size > 0
+        ):
+            print(
+                f"{time_for_logs()} ✅ Conversão OK: {convertido.name} "
+                f"({convertido.stat().st_size / 1024 / 1024:.1f} MB)"
+            )
             return convertido
 
         # Conversão falhou — loga e retorna original (será rejeitado em frames=0)
@@ -164,11 +201,11 @@ class VideoProcessor:
         Se sim → retorna o original (caminho normal com H264 do downloader).
         Se não → tenta converter (safety net para AV1/VP9 residual).
         """
-        cap      = cv2.VideoCapture(str(video_path))
+        cap = cv2.VideoCapture(str(video_path))
         pode_ler = False
         if cap.isOpened():
             ret, frame = cap.read()
-            pode_ler   = ret and frame is not None
+            pode_ler = ret and frame is not None
         cap.release()
 
         if pode_ler:
@@ -186,11 +223,20 @@ class VideoProcessor:
     def _get_codec_name(self, path: Path) -> str:
         """Retorna apenas o nome do codec de vídeo via ffprobe."""
         try:
-            cmd    = [self.ffprobe, "-v", "quiet", "-print_format", "json",
-                      "-show_streams", str(path)]
+            cmd = [
+                self.ffprobe,
+                "-v",
+                "quiet",
+                "-print_format",
+                "json",
+                "-show_streams",
+                str(path),
+            ]
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            data   = json.loads(result.stdout)
-            video  = next((s for s in data["streams"] if s["codec_type"] == "video"), None)
+            data = json.loads(result.stdout)
+            video = next(
+                (s for s in data["streams"] if s["codec_type"] == "video"), None
+            )
             return video.get("codec_name", "unknown") if video else "unknown"
         except Exception:
             return "unknown"
@@ -202,9 +248,13 @@ class VideoProcessor:
             raise ValueError(f"Arquivo vazio: {path}")
 
         cmd = [
-            self.ffprobe, "-v", "quiet",
-            "-print_format", "json",
-            "-show_streams", "-show_format",
+            self.ffprobe,
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_streams",
+            "-show_format",
             str(path),
         ]
         try:
@@ -214,7 +264,7 @@ class VideoProcessor:
                 f"ffprobe falhou para '{path.name}'.\nstderr: {e.stderr[:300]}"
             ) from e
 
-        data  = json.loads(result.stdout)
+        data = json.loads(result.stdout)
         video = next((s for s in data["streams"] if s["codec_type"] == "video"), None)
         if video is None:
             raise RuntimeError(f"Nenhuma stream de vídeo em '{path.name}'.")
@@ -222,10 +272,10 @@ class VideoProcessor:
         num, den = video["r_frame_rate"].split("/")
         return {
             "duration": float(data["format"]["duration"]),
-            "width":    int(video["width"]),
-            "height":   int(video["height"]),
-            "fps":      float(num) / float(den),
-            "codec":    video.get("codec_name", "unknown"),
+            "width": int(video["width"]),
+            "height": int(video["height"]),
+            "fps": float(num) / float(den),
+            "codec": video.get("codec_name", "unknown"),
         }
 
     def _generate_timestamps(self, duration: float) -> List[Dict]:
@@ -234,37 +284,153 @@ class VideoProcessor:
             return []
         step = (duration - self.clip_duration) / max(clips - 1, 1)
         return [
-            {"start": round(i * step, 2), "end": round(i * step + self.clip_duration, 2)}
+            {
+                "start": round(i * step, 2),
+                "end": round(i * step + self.clip_duration, 2),
+            }
             for i in range(clips)
         ]
 
-    def _add_watermark(self, frame: np.ndarray) -> np.ndarray:
-        h, w          = frame.shape[:2]
-        text          = "THE ATLAS"
-        font          = cv2.FONT_HERSHEY_SIMPLEX
-        fs, ft, alpha = 1.2, 3, 0.3
-        ts            = cv2.getTextSize(text, font, fs, ft)[0]
-        tx, ty        = (w - ts[0]) // 2, ts[1] + 20
-        ov            = frame.copy()
-        cv2.putText(ov, text, (tx, ty), font, fs, (0, 0, 0),     ft + 2)
-        cv2.putText(ov, text, (tx, ty), font, fs, (255,255,255),  ft)
-        cv2.addWeighted(ov, alpha, frame, 1 - alpha, 0, frame)
+    # ──────────────────────────────────────────────────────────────
+    #  MARCA D'ÁGUA MÓVEL (ESTILO TIKTOK)
+    # ──────────────────────────────────────────────────────────────
+
+    def _add_watermark(
+        self, frame: np.ndarray, alpha: float = 0.3, change_interval: float = 3.0
+    ) -> np.ndarray:
+        """
+        Adiciona marca d'água estilo TikTok que se move pela tela.
+
+        Args:
+            frame: Frame do vídeo (array numpy)
+            alpha: Transparência da marca (0-1)
+            change_interval: Intervalo em segundos para mudar de posição
+
+        Returns:
+            Frame com marca d'água aplicada
+        """
+        # ============================================================
+        # 1. VALIDAÇÃO - Se frame é None, retorna sem modificar
+        # ============================================================
+        if frame is None:
+            return frame
+
+        # ============================================================
+        # 2. OBTÉM DIMENSÕES DO FRAME
+        # ============================================================
+        h, w = frame.shape[:2]
+
+        # ============================================================
+        # 3. CONFIGURA TAMANHO DA FONTE DINÂMICO
+        # ============================================================
+        text = "CLIP ENGINE"
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = min(h, w) / 400  # Ajusta automaticamente
+        font_scale = max(1.0, min(font_scale, 3.0))  # Limita entre 1.0 e 3.0
+        thickness = max(2, int(font_scale * 1.5))
+
+        # ============================================================
+        # 4. CALCULA TAMANHO DO TEXTO
+        # ============================================================
+        (text_w, text_h), _ = cv2.getTextSize(text, font, font_scale, thickness)
+
+        # ============================================================
+        # 5. GERENCIA POSIÇÃO MÓVEL (ESTILO TIKTOK)
+        # ============================================================
+        # Verifica se deve mudar de posição (a cada change_interval segundos)
+        frames_to_change = int(self.fps * change_interval)
+
+        if (
+            self._watermark_frame_counter - self._watermark_last_change
+        ) >= frames_to_change:
+            # Define posições predefinidas (estilo TikTok)
+            positions = [
+                # (x_percent, y_percent, nome)
+                (5, 90, "canto_inferior_esquerdo"),
+                (75, 5, "canto_superior_direito"),
+                (5, 5, "canto_superior_esquerdo"),
+                (75, 90, "canto_inferior_direito"),
+                (40, 80, "meio_inferior"),
+                (40, 10, "meio_superior"),
+            ]
+
+            # Escolhe posição aleatória
+            x_percent, y_percent, pos_name = random.choice(positions)
+
+            # Calcula posição em pixels
+            self._watermark_pos_x = int((w - text_w) * (x_percent / 100))
+            self._watermark_pos_y = int((h - text_h) * (y_percent / 100))
+
+            # Garante que não fique fora da tela
+            self._watermark_pos_x = max(10, min(self._watermark_pos_x, w - text_w - 10))
+            self._watermark_pos_y = max(10, min(self._watermark_pos_y, h - text_h - 10))
+
+            self._watermark_last_change = self._watermark_frame_counter
+            self._watermark_pos_name = pos_name
+
+            # Log (opcional - descomente se quiser ver)
+            # print(f"🔄 Marca d'água movida para: {pos_name}")
+
+        # ============================================================
+        # 6. CRIA OVERLAY COM TEXTO
+        # ============================================================
+        overlay = frame.copy()
+
+        # Desenha sombra (contorno preto)
+        cv2.putText(
+            overlay,
+            text,
+            (self._watermark_pos_x, self._watermark_pos_y),
+            font,
+            font_scale,
+            (0, 0, 0),  # Preto
+            thickness + 2,
+            cv2.LINE_AA,
+        )
+
+        # Desenha texto principal (branco)
+        cv2.putText(
+            overlay,
+            text,
+            (self._watermark_pos_x, self._watermark_pos_y),
+            font,
+            font_scale,
+            (255, 255, 255),  # Branco
+            thickness,
+            cv2.LINE_AA,
+        )
+
+        # ============================================================
+        # 7. MISTURA COM TRANSPARÊNCIA
+        # ============================================================
+        cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
+
+        # ============================================================
+        # 8. INCREMENTA CONTADOR DE FRAMES
+        # ============================================================
+        self._watermark_frame_counter += 1
+
         return frame
+
+    # ──────────────────────────────────────────────────────────────
+    #  DETECÇÃO DE FACES OTIMIZADA
+    # ──────────────────────────────────────────────────────────────
 
     def _detect_faces_optimized(
         self, frame: np.ndarray, previous_faces: Dict
     ) -> Tuple[List[Dict], Any]:
-        rgb          = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        det_results  = self.face_detector.process(rgb)
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        det_results = self.face_detector.process(rgb)
         mesh_results = self.face_mesh.process(rgb)
-        detections   = []
+        detections = []
 
         if det_results and det_results.detections:
             h, w, _ = frame.shape
             for prev_id, prev_data in previous_faces.items():
                 self.face_tracker.add_or_update_face(
                     prev_id,
-                    prev_data["center"][0], prev_data["center"][1],
+                    prev_data["center"][0],
+                    prev_data["center"][1],
                     prev_data["area"],
                 )
             for detection in det_results.detections:
@@ -272,26 +438,29 @@ class VideoProcessor:
                 area = bbox.width * bbox.height
                 if area < self.min_face_area:
                     continue
-                cx   = int((bbox.xmin + bbox.width  / 2) * w)
-                cy   = int((bbox.ymin + bbox.height / 2) * h)
-                r    = int(w * 0.15)
+                cx = int((bbox.xmin + bbox.width / 2) * w)
+                cy = int((bbox.ymin + bbox.height / 2) * h)
+                r = int(w * 0.15)
                 near = self.face_tracker.get_nearest_faces(cx, cy, r)
-                fid  = near[0][1] if near else None
+                fid = near[0][1] if near else None
                 if fid is None:
                     fid = f"face_{self.next_face_id}"
                     self.next_face_id += 1
                 self._face_frequency[fid] += 1
-                conf = (
-                    min(1.0, self._face_frequency[fid] / 100)
-                    * min(1.0, area / 0.1)
-                )
+                conf = min(1.0, self._face_frequency[fid] / 100) * min(1.0, area / 0.1)
                 self._face_confidence[fid] = conf
                 self.face_tracker.add_or_update_face(fid, cx, cy, area)
-                detections.append({
-                    "id": fid, "center": (cx, cy),
-                    "center_x": cx, "center_y": cy,
-                    "area": area, "confidence": conf, "frame": frame,
-                })
+                detections.append(
+                    {
+                        "id": fid,
+                        "center": (cx, cy),
+                        "center_x": cx,
+                        "center_y": cy,
+                        "area": area,
+                        "confidence": conf,
+                        "frame": frame,
+                    }
+                )
         return detections, mesh_results
 
     # ──────────────────────────────────────────────────────────────
@@ -302,13 +471,15 @@ class VideoProcessor:
         self, video_path: Path, start: float, end: float, index: int
     ) -> Optional[Path]:
         duration = end - start
-        output   = self.raw_dir / f"{video_path.stem}_clip_{index:02d}.mp4"
+        output = self.raw_dir / f"{video_path.stem}_clip_{index:02d}.mp4"
 
         if output.exists():
             print(f"{time_for_logs()} Clipe {index} já existe, pulando...")
             return output
 
-        print(f"{time_for_logs()} 🎯 Processando clipe {index}: {start:.1f}s — {end:.1f}s")
+        print(
+            f"{time_for_logs()} 🎯 Processando clipe {index}: {start:.1f}s — {end:.1f}s"
+        )
 
         cap = cv2.VideoCapture(str(video_path))
         if not cap.isOpened():
@@ -317,24 +488,33 @@ class VideoProcessor:
 
         cap.set(cv2.CAP_PROP_POS_MSEC, start * 1000)
 
-        fps          = cap.get(cv2.CAP_PROP_FPS) or 30
-        frame_width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30
+        self.fps = fps  # Atualiza o FPS para a marca d'água
+        
+        frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        crop_width   = int(frame_height * 0.75)
+        crop_width = int(frame_height * 0.75)
         out_width, out_height = 720, 1280
 
         tracker = PreciseTracker(
-            frame_width=frame_width, frame_height=frame_height,
-            crop_width=crop_width, fps=fps, transition_seconds=1.0,
+            frame_width=frame_width,
+            frame_height=frame_height,
+            crop_width=crop_width,
+            fps=fps,
+            transition_seconds=1.0,
         )
 
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        out    = cv2.VideoWriter(str(output), fourcc, fps, (out_width, out_height))
+        out = cv2.VideoWriter(str(output), fourcc, fps, (out_width, out_height))
 
-        total_frames     = int(duration * fps)
+        total_frames = int(duration * fps)
         frames_processed = 0
-        previous_faces   = {}
+        previous_faces = {}
         start_time = last_log_time = time.time()
+
+        # Reseta o contador da marca d'água para cada clipe
+        self._watermark_frame_counter = 0
+        self._watermark_last_change = 0
 
         print(f"{time_for_logs()} Renderizando {total_frames} frames...")
 
@@ -343,31 +523,39 @@ class VideoProcessor:
             if not ret:
                 break
 
-            detections, mesh_results = self._detect_faces_optimized(frame, previous_faces)
+            detections, mesh_results = self._detect_faces_optimized(
+                frame, previous_faces
+            )
             previous_faces = {d["id"]: d for d in detections}
 
-            crop_x  = tracker.update(detections, mesh_results, frames_processed)
-            cropped = frame[0:frame_height, crop_x: crop_x + crop_width]
+            crop_x = tracker.update(detections, mesh_results, frames_processed)
+            cropped = frame[0:frame_height, crop_x : crop_x + crop_width]
             resized = cv2.resize(cropped, (out_width, out_height))
             resized = self._add_watermark(resized)
             out.write(resized)
             frames_processed += 1
 
             if frames_processed % 100 == 0:
-                now       = time.time()
-                elapsed   = now - last_log_time
-                fps_real  = 100 / elapsed if elapsed > 0 else 0
+                now = time.time()
+                elapsed = now - last_log_time
+                fps_real = 100 / elapsed if elapsed > 0 else 0
                 last_log_time = now
                 pct = frames_processed / total_frames * 100
                 if frames_processed % 500 == 0 and self.face_tracker.faces_by_area:
-                    print(f"{time_for_logs()} Faces: {self.face_tracker.get_largest_faces(3)}")
-                print(f"{time_for_logs()} {frames_processed}/{total_frames} ({pct:.1f}%) | {fps_real:.1f} fps")
+                    print(
+                        f"{time_for_logs()} Faces: {self.face_tracker.get_largest_faces(3)}"
+                    )
+                print(
+                    f"{time_for_logs()} {frames_processed}/{total_frames} ({pct:.1f}%) | {fps_real:.1f} fps"
+                )
 
         cap.release()
         out.release()
 
         elapsed = time.time() - start_time
-        print(f"{time_for_logs()} ✅ Renderizado: {frames_processed} frames em {elapsed:.1f}s")
+        print(
+            f"{time_for_logs()} ✅ Renderizado: {frames_processed} frames em {elapsed:.1f}s"
+        )
 
         if frames_processed > 0:
             return self._add_audio_to_video(video_path, output, start, duration)
@@ -382,12 +570,27 @@ class VideoProcessor:
         )
         cmd = [
             self.ffmpeg,
-            "-i",  str(video_no_audio),
-            "-ss", str(start), "-i", str(source_video),
-            "-t",  str(duration),
-            "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-            "-map", "0:v:0", "-map", "1:a:0",
-            "-shortest", "-y", str(output_wa),
+            "-i",
+            str(video_no_audio),
+            "-ss",
+            str(start),
+            "-i",
+            str(source_video),
+            "-t",
+            str(duration),
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0",
+            "-shortest",
+            "-y",
+            str(output_wa),
         ]
         try:
             subprocess.run(cmd, check=True, capture_output=True)
@@ -403,20 +606,37 @@ class VideoProcessor:
         self, video_path: Path, start: float, end: float, index: int
     ) -> Optional[Path]:
         """Fallback sem tracking — corte direto com FFmpeg."""
-        duration    = end - start
-        output      = self.raw_dir / f"{video_path.stem}_clip_{index:02d}.mp4"
-        info        = self._get_video_info(video_path)
-        crop_width  = int(info["height"] * 0.75)
-        crop_x      = (info["width"] - crop_width) // 2
+        duration = end - start
+        output = self.raw_dir / f"{video_path.stem}_clip_{index:02d}.mp4"
+        info = self._get_video_info(video_path)
+        crop_width = int(info["height"] * 0.75)
+        crop_x = (info["width"] - crop_width) // 2
         crop_filter = f"crop={crop_width}:{info['height']}:{crop_x}:0,scale=720:1280"
 
         cmd = [
             self.ffmpeg,
-            "-ss", str(start), "-i", str(video_path), "-t", str(duration),
-            "-vf", crop_filter,
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-            "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
-            "-y", str(output),
+            "-ss",
+            str(start),
+            "-i",
+            str(video_path),
+            "-t",
+            str(duration),
+            "-vf",
+            crop_filter,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            "-y",
+            str(output),
         ]
         try:
             subprocess.run(cmd, check=True, capture_output=True)
@@ -426,18 +646,32 @@ class VideoProcessor:
             return None
 
     def create_clip(
-        self, video_path: Path, start: float, end: float,
-        index: int, tracking: bool = True,
+        self,
+        video_path: Path,
+        start: float,
+        end: float,
+        index: int,
+        tracking: bool = True,
     ):
         if tracking:
             return self.create_clip_with_precise_tracking(video_path, start, end, index)
         return self._create_clip_ffmpeg(video_path, start, end, index)
 
     # ──────────────────────────────────────────────────────────────
-    #  ENTRY POINT
+    #  ENTRY POINT - MÉTODO PROCESS
     # ──────────────────────────────────────────────────────────────
 
     async def process(self, video_name: str, tracking: bool = True) -> List[Path]:
+        """
+        Processa um vídeo gerando clipes.
+        
+        Args:
+            video_name: Nome do arquivo de vídeo
+            tracking: Se True, usa face tracking; se False, usa FFmpeg fallback
+            
+        Returns:
+            Lista de caminhos dos clipes gerados
+        """
         # ── Resolve caminho ───────────────────────────────────────
         video_path = self.in_dir / video_name
 
@@ -450,9 +684,10 @@ class VideoProcessor:
 
         # Fallback: busca por stem parecido
         if not video_path.exists():
-            stem      = Path(video_name).stem.replace("_safe", "")
+            stem = Path(video_name).stem.replace("_safe", "")
             candidatos = [
-                c for c in self.in_dir.glob(f"{stem}*.mp4")
+                c
+                for c in self.in_dir.glob(f"{stem}*.mp4")
                 if "_safe" not in c.name and "_cv2" not in c.name
             ]
             if candidatos:
@@ -469,15 +704,15 @@ class VideoProcessor:
         print(f"{time_for_logs()} Caminho: {video_path}")
 
         # ── Safety net — só age se downloader falhou em pegar H264 ─
-        video_path = await asyncio.to_thread(
-            self._garantir_compatibilidade, video_path
-        )
+        video_path = await asyncio.to_thread(self._garantir_compatibilidade, video_path)
 
         # ── Gera clipes ───────────────────────────────────────────
-        info       = self._get_video_info(video_path)
+        info = self._get_video_info(video_path)
         timestamps = self._generate_timestamps(info["duration"])
-        print(f"{time_for_logs()} Gerando {len(timestamps)} clipes de {self.clip_duration}s "
-              f"| codec: {info['codec']}")
+        print(
+            f"{time_for_logs()} Gerando {len(timestamps)} clipes de {self.clip_duration}s "
+            f"| codec: {info['codec']}"
+        )
 
         clips = []
         for i, ts in enumerate(timestamps):
@@ -487,22 +722,32 @@ class VideoProcessor:
 
             clip = await asyncio.to_thread(
                 self.create_clip,
-                video_path, ts["start"], ts["end"], i + 1, tracking,
+                video_path,
+                ts["start"],
+                ts["end"],
+                i + 1,
+                tracking,
             )
 
             if clip and clip.exists() and clip.stat().st_size > 1024 * 1024:
                 clips.append(clip)
-                print(f"{time_for_logs()} ✅ Clipe: {clip.name} "
-                      f"({clip.stat().st_size / 1024 / 1024:.1f} MB)")
+                print(
+                    f"{time_for_logs()} ✅ Clipe: {clip.name} "
+                    f"({clip.stat().st_size / 1024 / 1024:.1f} MB)"
+                )
             elif clip and clip.exists():
-                print(f"{time_for_logs()} ⚠️  Clipe muito pequeno, removendo: {clip.name}")
+                print(
+                    f"{time_for_logs()} ⚠️  Clipe muito pequeno, removendo: {clip.name}"
+                )
                 clip.unlink()
 
         # ── Limpa _cv2 se usado ───────────────────────────────────
         if "_cv2" in video_path.name:
             try:
                 video_path.unlink()
-                print(f"{time_for_logs()} 🗑️  Removido arquivo temporário: {video_path.name}")
+                print(
+                    f"{time_for_logs()} 🗑️  Removido arquivo temporário: {video_path.name}"
+                )
             except Exception:
                 pass
 

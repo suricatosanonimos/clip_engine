@@ -17,6 +17,9 @@ from src.config.settings import Colors
 from src.controllers.video_processing import VideoProcessor
 from src.services.transcriber import SubtitleGenerator
 
+#
+from src.utils.subtitle_constants import *
+
 # Decorador para visualizar o tempo de execição das função
 from src.utils.execution_time import execution_time_of_a_function
 from src.utils.time_log import time_for_logs
@@ -289,9 +292,9 @@ Exemplos de uso:
 
         # Mostra preview das palavras censuradas
         print(f"\n  {Colors.info('📋 Palavras protegidas:')}")
-        bad_words_sample = list(subtitle_gen.BAD_WORDS.keys())[:5]
+        bad_words_sample = list(BAD_WORDS.keys())[:5]
         for word in bad_words_sample:
-            censored = subtitle_gen.BAD_WORDS[word]
+            censored = BAD_WORDS[word]
             print(f"  • {word} → {censored} ⚠️")
 
         # Processa legendas em lotes

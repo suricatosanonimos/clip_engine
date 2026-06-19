@@ -105,4 +105,3 @@ class VideoAssembler(GenerateFinalVideo):
         main_clip.close()
         final_video.close()
         print(f"✅ Vídeo finalizado com sucesso em: {output_path}")
-

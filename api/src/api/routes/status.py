@@ -11,20 +11,20 @@ import json
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
-
-from src.api.schemas import TaskStatusResponse, TaskStatus, ClipResult
-from src.api.task_store import get_task, all_tasks
+from src.api.schemas import ClipResult, TaskStatus, TaskStatusResponse
+from src.api.task_store import all_tasks, get_task
 
 router = APIRouter(prefix="/status", tags=["Status"])
 
 # Intervalo máximo de espera entre checks internos (ms)
 # Baixo o suficiente para capturar transições rápidas sem usar CPU
-_POLL_INTERVAL = 0.5   # 500 ms — interno, nunca vira request HTTP
+_POLL_INTERVAL = 0.5  # 500 ms — interno, nunca vira request HTTP
 
 
 # ──────────────────────────────────────────────────────────────────
 #  SNAPSHOT — mantido para compatibilidade e debug
 # ──────────────────────────────────────────────────────────────────
+
 
 @router.get(
     "/{task_id}",
@@ -53,6 +53,7 @@ async def get_status(task_id: str):
 #  SSE — stream de eventos (uma conexão, zero ping)
 # ──────────────────────────────────────────────────────────────────
 
+
 @router.get(
     "/{task_id}/stream",
     summary="SSE — recebe updates em tempo real sem polling",
@@ -76,7 +77,7 @@ async def stream_status(task_id: str, request: Request):
         )
 
     async def _gerador():
-        ultimo_status   = None
+        ultimo_status = None
         ultimo_progress = None
 
         while True:
@@ -88,21 +89,21 @@ async def stream_status(task_id: str, request: Request):
             if not task:
                 break
 
-            status_atual   = task["status"]
+            status_atual = task["status"]
             progress_atual = round(float(task.get("progress", 0.0)), 3)
 
             # Só emite se algo mudou
             if status_atual != ultimo_status or progress_atual != ultimo_progress:
-                ultimo_status   = status_atual
+                ultimo_status = status_atual
                 ultimo_progress = progress_atual
 
                 payload = {
-                    "task_id":  task_id,
-                    "status":   status_atual,
+                    "task_id": task_id,
+                    "status": status_atual,
                     "progress": progress_atual,
-                    "message":  task.get("message", ""),
-                    "clips":    task.get("clips", []),
-                    "error":    task.get("error"),
+                    "message": task.get("message", ""),
+                    "clips": task.get("clips", []),
+                    "error": task.get("error"),
                 }
                 yield f"data: {json.dumps(payload)}\n\n"
 
@@ -116,8 +117,8 @@ async def stream_status(task_id: str, request: Request):
         _gerador(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control":    "no-cache",
-            "X-Accel-Buffering":"no",   # desativa buffer no nginx
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # desativa buffer no nginx
         },
     )
 
@@ -125,6 +126,7 @@ async def stream_status(task_id: str, request: Request):
 # ──────────────────────────────────────────────────────────────────
 #  DEBUG
 # ──────────────────────────────────────────────────────────────────
+
 
 @router.get("/", summary="Lista tarefas (debug)", include_in_schema=False)
 async def list_tasks():

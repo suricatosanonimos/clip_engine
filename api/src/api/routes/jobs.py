@@ -12,7 +12,6 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
-
 from src.database.supabase_client import get_supabase_admin_client
 from src.utils.logs import logger
 
@@ -23,29 +22,31 @@ router = APIRouter(prefix="/jobs", tags=["Jobs"])
 #  SCHEMAS
 # ──────────────────────────────────────────────────────────────────
 
+
 class JobCreateRequest(BaseModel):
-    user_id:       str
-    source_type:   str = "youtube"          # "youtube" | "upload"
-    source_url:    Optional[str] = None
-    num_clips:     int  = 3
-    clip_duration: int  = 60
-    tracking:      bool = True
+    user_id: str
+    source_type: str = "youtube"  # "youtube" | "upload"
+    source_url: Optional[str] = None
+    num_clips: int = 3
+    clip_duration: int = 60
+    tracking: bool = True
 
 
 class JobResponse(BaseModel):
-    id:            str
-    user_id:       str
-    status:        str
-    source_type:   str
-    source_url:    Optional[str]
-    num_clips:     int
+    id: str
+    user_id: str
+    status: str
+    source_type: str
+    source_url: Optional[str]
+    num_clips: int
     clip_duration: int
-    tracking:      bool
+    tracking: bool
 
 
 # ──────────────────────────────────────────────────────────────────
 #  CRIAR JOB
 # ──────────────────────────────────────────────────────────────────
+
 
 @router.post(
     "",
@@ -64,18 +65,24 @@ async def criar_job(body: JobCreateRequest) -> Dict[str, Any]:
     client = get_supabase_admin_client()
 
     try:
-        resp = client.table("jobs").insert({
-            "id":            job_id,
-            "user_id":       body.user_id,
-            "status":        "pending",
-            "source_type":   body.source_type,
-            "source_url":    body.source_url,
-            "num_clips":     body.num_clips,
-            "clip_duration": body.clip_duration,
-            "tracking":      body.tracking,
-            "progress":      0,
-            "message":       "Aguardando início do pipeline.",
-        }).execute()
+        resp = (
+            client.table("jobs")
+            .insert(
+                {
+                    "id": job_id,
+                    "user_id": body.user_id,
+                    "status": "pending",
+                    "source_type": body.source_type,
+                    "source_url": body.source_url,
+                    "num_clips": body.num_clips,
+                    "clip_duration": body.clip_duration,
+                    "tracking": body.tracking,
+                    "progress": 0,
+                    "message": "Aguardando início do pipeline.",
+                }
+            )
+            .execute()
+        )
 
         if not resp.data:
             raise HTTPException(
@@ -101,14 +108,15 @@ async def criar_job(body: JobCreateRequest) -> Dict[str, Any]:
 #  LISTAR JOBS DO USUÁRIO
 # ──────────────────────────────────────────────────────────────────
 
+
 @router.get(
     "",
     summary="Lista jobs do usuário",
 )
 async def listar_jobs(
     user_id: str = Query(..., description="UUID do usuário autenticado"),
-    limit:   int = Query(20, ge=1, le=100),
-    offset:  int = Query(0,  ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
 ):
     client = get_supabase_admin_client()
     try:

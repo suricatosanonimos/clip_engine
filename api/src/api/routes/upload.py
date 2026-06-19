@@ -16,13 +16,21 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import (
-    APIRouter, BackgroundTasks, File, Form,
-    HTTPException, UploadFile, status,
+    APIRouter,
+    BackgroundTasks,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    status,
 )
-
 from src.api.routes.video import (
-    _etapa_legendas, _montar_clip_results, _montar_clip_results_simples,
-    _run_async, _salvar_clips_safe, _atualizar_job_safe,
+    _atualizar_job_safe,
+    _etapa_legendas,
+    _montar_clip_results,
+    _montar_clip_results_simples,
+    _run_async,
+    _salvar_clips_safe,
 )
 from src.api.schemas import TaskStatus, VideoProcessResponse
 from src.api.task_store import create_task, update_task
@@ -31,7 +39,7 @@ from src.utils.logs import logger
 
 router = APIRouter(prefix="/video", tags=["Video"])
 
-ROOT_DIR      = Path(__file__).resolve().parent.parent.parent.parent
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent.parent
 DOWNLOADS_DIR = ROOT_DIR / "downloads"
 DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -41,6 +49,7 @@ EXTENSOES_PERMITIDAS = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".3gp", ".m4v"}
 # ──────────────────────────────────────────────────────────────────
 #  UPLOAD DO VÍDEO ORIGINAL PARA STORAGE
 # ──────────────────────────────────────────────────────────────────
+
 
 def _upload_video_original(
     video_path: Path,
@@ -52,21 +61,22 @@ def _upload_video_original(
     Retorna o storage_path ou None se falhar.
     """
     try:
-        from src.database.supabase_client import get_supabase_admin_client
         import mimetypes
 
-        client       = get_supabase_admin_client()
+        from src.database.supabase_client import get_supabase_admin_client
+
+        client = get_supabase_admin_client()
         storage_path = f"{user_id}/{job_id}/{video_path.name}"
-        mime_type    = mimetypes.guess_type(str(video_path))[0] or "video/mp4"
+        mime_type = mimetypes.guess_type(str(video_path))[0] or "video/mp4"
 
         with open(video_path, "rb") as f:
             client.storage.from_("videos").upload(
                 path=storage_path,
                 file=f,
                 file_options={
-                    "content-type":  mime_type,
+                    "content-type": mime_type,
                     "cache-control": "3600",
-                    "upsert":        "true",
+                    "upsert": "true",
                 },
             )
         logger.info(f"Vídeo original enviado para Storage: {storage_path}")
@@ -80,26 +90,36 @@ def _upload_video_original(
 #  WORKER
 # ──────────────────────────────────────────────────────────────────
 
+
 def _run_pipeline_upload(
-    task_id:       str,
-    job_id:        str,
-    user_id:       str,
-    video_path:    str,
-    num_clips:     int,
+    task_id: str,
+    job_id: str,
+    user_id: str,
+    video_path: str,
+    num_clips: int,
     clip_duration: int,
-    tracking:      bool,
-    subtitles:     bool,
-    cor_legenda:   str = "white",
+    tracking: bool,
+    subtitles: bool,
+    cor_legenda: str = "white",
 ):
     try:
         video_path_obj = Path(video_path)
-        video_name     = video_path_obj.name
+        video_name = video_path_obj.name
 
         # ── ETAPA 1: Sobe vídeo original para Storage ─────────────
-        update_task(task_id, status=TaskStatus.DOWNLOADING, progress=0.10,
-                    message="Enviando vídeo para a nuvem...")
-        _atualizar_job_safe(job_id, user_id, status="downloading",
-                            progress=0.10, message="Enviando vídeo original...")
+        update_task(
+            task_id,
+            status=TaskStatus.DOWNLOADING,
+            progress=0.10,
+            message="Enviando vídeo para a nuvem...",
+        )
+        _atualizar_job_safe(
+            job_id,
+            user_id,
+            status="downloading",
+            progress=0.10,
+            message="Enviando vídeo original...",
+        )
 
         storage_path_original = _upload_video_original(video_path_obj, user_id, job_id)
 
@@ -107,22 +127,34 @@ def _run_pipeline_upload(
         if storage_path_original:
             try:
                 from src.database.supabase_client import get_supabase_admin_client
-                get_supabase_admin_client().table("jobs").update({
-                    "source_storage_path": storage_path_original,
-                    "status": "processing",
-                }).eq("id", job_id).execute()
+
+                get_supabase_admin_client().table("jobs").update(
+                    {
+                        "source_storage_path": storage_path_original,
+                        "status": "processing",
+                    }
+                ).eq("id", job_id).execute()
             except Exception as e:
                 logger.warning(f"Não foi possível atualizar source_storage_path: {e}")
 
         # ── ETAPA 2: VideoProcessor ────────────────────────────────
-        update_task(task_id, status=TaskStatus.PROCESSING, progress=0.20,
-                    message="Processando vídeo com tracking de rostos...")
-        _atualizar_job_safe(job_id, user_id, status="processing",
-                            progress=0.20, message="Processando com tracking...")
+        update_task(
+            task_id,
+            status=TaskStatus.PROCESSING,
+            progress=0.20,
+            message="Processando vídeo com tracking de rostos...",
+        )
+        _atualizar_job_safe(
+            job_id,
+            user_id,
+            status="processing",
+            progress=0.20,
+            message="Processando com tracking...",
+        )
 
         processor = VideoProcessor(num_shots=num_clips)
         processor.clip_duration = clip_duration
-        processor.in_dir        = DOWNLOADS_DIR
+        processor.in_dir = DOWNLOADS_DIR
 
         clips_gerados: List[Path] = _run_async(
             processor.process(video_name=video_name, tracking=tracking)
@@ -131,25 +163,52 @@ def _run_pipeline_upload(
             raise RuntimeError("VideoProcessor não gerou nenhum clipe.")
 
         logger.info(f"[{task_id}] ✅ {len(clips_gerados)} clipes gerados.")
-        update_task(task_id, status=TaskStatus.TRANSCRIBING, progress=0.55,
-                    message=f"{len(clips_gerados)} clipes brutos gerados.")
-        _atualizar_job_safe(job_id, user_id, status="transcribing",
-                            progress=0.55, message=f"{len(clips_gerados)} clipes gerados.")
+        update_task(
+            task_id,
+            status=TaskStatus.TRANSCRIBING,
+            progress=0.55,
+            message=f"{len(clips_gerados)} clipes brutos gerados.",
+        )
+        _atualizar_job_safe(
+            job_id,
+            user_id,
+            status="transcribing",
+            progress=0.55,
+            message=f"{len(clips_gerados)} clipes gerados.",
+        )
 
         # ── ETAPA 3: Legendas (opcional) ───────────────────────────
         clips_finais = list(clips_gerados)
         if subtitles:
-            update_task(task_id, status=TaskStatus.ANALYZING, progress=0.60,
-                        message="Gerando legendas word-by-word...")
-            _atualizar_job_safe(job_id, user_id, status="analyzing",
-                                progress=0.60, message="Gerando legendas...")
+            update_task(
+                task_id,
+                status=TaskStatus.ANALYZING,
+                progress=0.60,
+                message="Gerando legendas word-by-word...",
+            )
+            _atualizar_job_safe(
+                job_id,
+                user_id,
+                status="analyzing",
+                progress=0.60,
+                message="Gerando legendas...",
+            )
             clips_finais = _etapa_legendas(task_id, clips_gerados, cor_legenda)
 
         # ── ETAPA 4: Upload clipes para Storage ────────────────────
-        update_task(task_id, status=TaskStatus.ANALYZING, progress=0.82,
-                    message="Salvando clipes na nuvem...")
-        _atualizar_job_safe(job_id, user_id, status="analyzing",
-                            progress=0.82, message="Enviando clipes para Storage...")
+        update_task(
+            task_id,
+            status=TaskStatus.ANALYZING,
+            progress=0.82,
+            message="Salvando clipes na nuvem...",
+        )
+        _atualizar_job_safe(
+            job_id,
+            user_id,
+            status="analyzing",
+            progress=0.82,
+            message="Enviando clipes para Storage...",
+        )
 
         clip_results = _salvar_clips_safe(clips_finais, user_id, job_id, task_id)
 
@@ -157,24 +216,47 @@ def _run_pipeline_upload(
             raise RuntimeError("Nenhum clipe foi gerado ou salvo.")
 
         # ── Resultado ──────────────────────────────────────────────
-        update_task(task_id, status=TaskStatus.DONE, progress=1.0,
-                    message=f"✅ {len(clip_results)} clipes prontos!",
-                    clips=clip_results)
-        _atualizar_job_safe(job_id, user_id, status="done",
-                            progress=1.0, message=f"{len(clip_results)} clipes prontos.")
-        logger.info(f"[{task_id}] ✅ Upload pipeline finalizado com {len(clip_results)} clipes.")
+        update_task(
+            task_id,
+            status=TaskStatus.DONE,
+            progress=1.0,
+            message=f"✅ {len(clip_results)} clipes prontos!",
+            clips=clip_results,
+        )
+        _atualizar_job_safe(
+            job_id,
+            user_id,
+            status="done",
+            progress=1.0,
+            message=f"{len(clip_results)} clipes prontos.",
+        )
+        logger.info(
+            f"[{task_id}] ✅ Upload pipeline finalizado com {len(clip_results)} clipes."
+        )
 
     except Exception as exc:
         logger.error(f"[{task_id}] ❌ Erro: {exc}", exc_info=True)
-        update_task(task_id, status=TaskStatus.ERROR, progress=0.0,
-                    message="Erro durante o processamento.", error=str(exc))
-        _atualizar_job_safe(job_id, user_id, status="error",
-                            progress=0.0, message="Erro.", error=str(exc))
+        update_task(
+            task_id,
+            status=TaskStatus.ERROR,
+            progress=0.0,
+            message="Erro durante o processamento.",
+            error=str(exc),
+        )
+        _atualizar_job_safe(
+            job_id,
+            user_id,
+            status="error",
+            progress=0.0,
+            message="Erro.",
+            error=str(exc),
+        )
 
 
 # ──────────────────────────────────────────────────────────────────
 #  ROTA
 # ──────────────────────────────────────────────────────────────────
+
 
 @router.post(
     "/upload",
@@ -184,14 +266,14 @@ def _run_pipeline_upload(
 )
 async def upload_video(
     background_tasks: BackgroundTasks,
-    file:          UploadFile = File(...,          description="Arquivo de vídeo"),
-    user_id:       str        = Form(...,          description="UUID do usuário autenticado"),
-    job_id:        str        = Form(...,          description="UUID do job criado no banco"),
-    num_clips:     int        = Form(default=3),
-    clip_duration: int        = Form(default=60),
-    tracking:      bool       = Form(default=True),
-    subtitles:     bool       = Form(default=False),
-    cor_legenda:   str        = Form(default="white"),
+    file: UploadFile = File(..., description="Arquivo de vídeo"),
+    user_id: str = Form(..., description="UUID do usuário autenticado"),
+    job_id: str = Form(..., description="UUID do job criado no banco"),
+    num_clips: int = Form(default=3),
+    clip_duration: int = Form(default=60),
+    tracking: bool = Form(default=True),
+    subtitles: bool = Form(default=False),
+    cor_legenda: str = Form(default="white"),
 ):
     """
     1. Salva o arquivo em downloads/
@@ -223,8 +305,11 @@ async def upload_video(
     logger.info(f"Upload recebido: {destino.name} ({size_mb:.1f} MB) | job: {job_id}")
 
     task_id = create_task()
-    update_task(task_id, status=TaskStatus.PENDING,
-                message=f"Arquivo recebido: {destino.name}. Iniciando...")
+    update_task(
+        task_id,
+        status=TaskStatus.PENDING,
+        message=f"Arquivo recebido: {destino.name}. Iniciando...",
+    )
 
     background_tasks.add_task(
         _run_pipeline_upload,

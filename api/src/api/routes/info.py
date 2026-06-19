@@ -4,7 +4,6 @@ POST /api/info/titles → gera títulos virais com a Brain IA
 """
 
 from fastapi import APIRouter, HTTPException, status
-
 from src.api.schemas import (
     TitlesRequest,
     TitlesResponse,
@@ -64,7 +63,7 @@ async def generate_titles(body: TitlesRequest):
     """
     try:
         fetcher = GetInfoVideo(url=body.url)
-        result  = await fetcher.create_titles(num_titles=body.count)
+        result = await fetcher.create_titles(num_titles=body.count)
 
         if "error" in result:
             raise HTTPException(

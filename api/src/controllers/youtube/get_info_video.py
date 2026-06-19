@@ -11,7 +11,6 @@ import asyncio
 from typing import Any, Dict, List, Optional
 
 import yt_dlp
-
 from src.services.brain_IA import Brain
 from src.utils.logs import logger
 
@@ -27,6 +26,7 @@ class GetInfoVideo:
     async def get_info(self) -> Dict[str, Any]:
         """Retorna metadados do vídeo sem fazer download."""
         try:
+
             def _sync(url: str) -> Dict[str, Any]:
                 with yt_dlp.YoutubeDL({"quiet": True}) as ydl:
                     return ydl.extract_info(url, download=False)  # type: ignore
@@ -41,10 +41,10 @@ class GetInfoVideo:
                 description = description[:1000] + "..."
 
             return {
-                "title":       info.get("title", ""),
-                "duration":    info.get("duration", 0),
-                "uploader":    info.get("uploader", ""),
-                "view_count":  info.get("view_count", 0),
+                "title": info.get("title", ""),
+                "duration": info.get("duration", 0),
+                "uploader": info.get("uploader", ""),
+                "view_count": info.get("view_count", 0),
                 "description": description,
             }
 
@@ -85,9 +85,7 @@ class GetInfoVideo:
                 try:
                     descricao = info.get("description", "") or info.get("title", "")
                     # Monta segmentos fake para a Brain processar o texto
-                    segmentos_fake = [
-                        {"start": 0.0, "end": 10.0, "text": descricao}
-                    ]
+                    segmentos_fake = [{"start": 0.0, "end": 10.0, "text": descricao}]
                     resultado = brain.encontrar_melhores_momentos(
                         segmentos_fake, duracao_total=10.0
                     )
@@ -96,9 +94,7 @@ class GetInfoVideo:
                     if isinstance(resultado, dict):
                         # Se Brain retornar campo "titles" ou "titulos"
                         titles = (
-                            resultado.get("titles")
-                            or resultado.get("titulos")
-                            or []
+                            resultado.get("titles") or resultado.get("titulos") or []
                         )
                         # Se não, monta a partir dos momentos sugeridos
                         if not titles:
@@ -114,7 +110,9 @@ class GetInfoVideo:
                             for item in resultado
                         ]
                 except Exception as e:
-                    logger.warning(f"encontrar_melhores_momentos para títulos falhou: {e}")
+                    logger.warning(
+                        f"encontrar_melhores_momentos para títulos falhou: {e}"
+                    )
 
             # ── Fallback final: variações simples do título original
             if not titles:
@@ -126,10 +124,10 @@ class GetInfoVideo:
             titles = [t for t in titles if t][:num_titles]
 
             return {
-                "success":     True,
+                "success": True,
                 "video_title": info.get("title", ""),
-                "titles":      titles,
-                "count":       len(titles),
+                "titles": titles,
+                "count": len(titles),
             }
 
         except Exception as e:
@@ -139,6 +137,7 @@ class GetInfoVideo:
 # ──────────────────────────────────────────────────────────────────
 #  FALLBACK — títulos simples sem IA
 # ──────────────────────────────────────────────────────────────────
+
 
 def _gerar_titulos_fallback(titulo: str, count: int) -> List[str]:
     """

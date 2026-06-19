@@ -27,28 +27,26 @@ import sys
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parent
-SRC_DIR  = ROOT_DIR / "src"
+SRC_DIR = ROOT_DIR / "src"
 
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-from src.api.routes.info     import router as info_router
-from src.api.routes.status   import router as status_router
-from src.api.routes.upload   import router as upload_router
-from src.api.routes.video    import router as video_router
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+from src.api.routes.clips import router as clips_video
+from src.api.routes.info import router as info_router
+from src.api.routes.jobs import router as jobs_router
+from src.api.routes.login import router as login_in_account
 from src.api.routes.register import router as register_account
-from src.api.routes.login    import router as login_in_account
-from src.api.routes.clips    import router as clips_video
-from src.api.routes.jobs     import router as jobs_router
+from src.api.routes.status import router as status_router
+from src.api.routes.upload import router as upload_router
+from src.api.routes.video import router as video_router
 
 # ──────────────────────────────────────────────────────────────────
 #  APP
@@ -84,18 +82,19 @@ app.add_middleware(
 #  ROUTERS
 # ──────────────────────────────────────────────────────────────────
 
-app.include_router(jobs_router,      prefix="/api")   #  antes dos outros
-app.include_router(video_router,     prefix="/api")
-app.include_router(upload_router,    prefix="/api")
-app.include_router(status_router,    prefix="/api")
-app.include_router(info_router,      prefix="/api")
+app.include_router(jobs_router, prefix="/api")  #  antes dos outros
+app.include_router(video_router, prefix="/api")
+app.include_router(upload_router, prefix="/api")
+app.include_router(status_router, prefix="/api")
+app.include_router(info_router, prefix="/api")
 app.include_router(register_account, prefix="/api")
 app.include_router(login_in_account, prefix="/api")
-app.include_router(clips_video,      prefix="/api")
+app.include_router(clips_video, prefix="/api")
 
 # ──────────────────────────────────────────────────────────────────
 #  HEALTH CHECK
 # ──────────────────────────────────────────────────────────────────
+
 
 @app.get("/", tags=["Health"])
 async def root():
@@ -113,4 +112,5 @@ async def health():
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("main_api:app", host="0.0.0.0", port=8000, reload=True)

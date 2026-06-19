@@ -7,14 +7,13 @@ POST /api/clips/{clip_id}/refresh-url → renova signed URL (7 dias)
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, status
-
 from src.api.schemas import ClipGaleria
 from src.database.supabase_client import get_supabase_admin_client
 from src.utils.logs import logger
 
 router = APIRouter(prefix="/clips", tags=["Clips"])
 
-SIGNED_URL_EXPIRES = 60 * 60 * 24 * 7   # 7 dias
+SIGNED_URL_EXPIRES = 60 * 60 * 24 * 7  # 7 dias
 
 
 @router.get(
@@ -23,10 +22,10 @@ SIGNED_URL_EXPIRES = 60 * 60 * 24 * 7   # 7 dias
     summary="Lista clipes prontos do usuário",
 )
 async def listar_clips(
-    user_id: str           = Query(...,    description="UUID do usuário autenticado"),
-    job_id:  Optional[str] = Query(None,  description="Filtrar por job específico"),
-    limit:   int           = Query(50,    ge=1, le=200),
-    offset:  int           = Query(0,     ge=0),
+    user_id: str = Query(..., description="UUID do usuário autenticado"),
+    job_id: Optional[str] = Query(None, description="Filtrar por job específico"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
 ):
     """
     Retorna os clipes do usuário ordenados do mais recente para o mais antigo.
@@ -44,7 +43,7 @@ async def listar_clips(
         if job_id:
             query = query.eq("job_id", job_id)
 
-        resp  = query.execute()
+        resp = query.execute()
         clips = resp.data or []
 
     except Exception as e:
@@ -80,15 +79,22 @@ async def detalhe_clip(clip_id: str):
     client = get_supabase_admin_client()
     try:
         resp = client.table("clips").select("*").eq("id", clip_id).single().execute()
-        c    = resp.data
+        c = resp.data
     except Exception:
-        raise HTTPException(status_code=404, detail=f"Clipe '{clip_id}' não encontrado.")
+        raise HTTPException(
+            status_code=404, detail=f"Clipe '{clip_id}' não encontrado."
+        )
 
     return ClipGaleria(
-        id=c["id"], job_id=c["job_id"], filename=c["filename"],
-        storage_path=c["storage_path"], public_url=c.get("public_url"),
-        size_mb=c.get("size_mb"), clip_index=c.get("clip_index", 0),
-        score=c.get("score", 0.0), motivo=c.get("motivo"),
+        id=c["id"],
+        job_id=c["job_id"],
+        filename=c["filename"],
+        storage_path=c["storage_path"],
+        public_url=c.get("public_url"),
+        size_mb=c.get("size_mb"),
+        clip_index=c.get("clip_index", 0),
+        score=c.get("score", 0.0),
+        motivo=c.get("motivo"),
         created_at=str(c.get("created_at", "")),
     )
 
@@ -102,21 +108,33 @@ async def renovar_url(clip_id: str):
     client = get_supabase_admin_client()
 
     try:
-        resp = client.table("clips").select("storage_path").eq("id", clip_id).single().execute()
+        resp = (
+            client.table("clips")
+            .select("storage_path")
+            .eq("id", clip_id)
+            .single()
+            .execute()
+        )
         storage_path = resp.data["storage_path"]
     except Exception:
-        raise HTTPException(status_code=404, detail=f"Clipe '{clip_id}' não encontrado.")
+        raise HTTPException(
+            status_code=404, detail=f"Clipe '{clip_id}' não encontrado."
+        )
 
     try:
-        resultado  = client.storage.from_("clips").create_signed_url(
+        resultado = client.storage.from_("clips").create_signed_url(
             storage_path, SIGNED_URL_EXPIRES
         )
         signed_url = resultado.get("signedURL") or resultado.get("signed_url", "")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Não foi possível renovar a URL: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Não foi possível renovar a URL: {e}"
+        )
 
     try:
-        client.table("clips").update({"public_url": signed_url}).eq("id", clip_id).execute()
+        client.table("clips").update({"public_url": signed_url}).eq(
+            "id", clip_id
+        ).execute()
     except Exception as e:
         logger.warning(f"URL renovada mas não salva no banco: {e}")
 
