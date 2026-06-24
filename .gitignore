@@ -2,6 +2,7 @@
 *.avi
 *.ass
 teste.py
+test/
 *.jpeg
 *.jpg
 downloads/

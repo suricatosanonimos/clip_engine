@@ -231,11 +231,12 @@ class VideoInfoRequest(BaseModel):
 
 
 class VideoInfoResponse(BaseModel):
-    title: str
-    duration: int
-    uploader: str
-    view_count: int
-    description: str
+    """Resposta com informações do vídeo"""
+    title: str = Field(..., description="Título do vídeo")
+    duration: int = Field(..., description="Duração em segundos")
+    uploader: str = Field(..., description="Nome do canal")
+    view_count: int = Field(..., description="Número de visualizações")
+    description: str = Field(..., description="Descrição do vídeo")
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -244,17 +245,21 @@ class VideoInfoResponse(BaseModel):
 
 
 class TitlesRequest(BaseModel):
+    """Requisição para gerar títulos"""
     url: str = Field(..., description="URL do vídeo no YouTube")
     count: int = Field(
-        default=5, ge=1, le=20, description="Quantidade de títulos a gerar"
+        default=5,
+        ge=1,
+        le=20,
+        description="Quantidade de títulos a gerar"
     )
 
 
 class TitlesResponse(BaseModel):
-    video_title: str
-    titles: List[str]
-    count: int
-
+    """Resposta com títulos gerados"""
+    video_title: str = Field(..., description="Título original do vídeo")
+    titles: List[str] = Field(..., description="Lista de títulos gerados")
+    count: int = Field(..., description="Quantidade de títulos")
 
 # ──────────────────────────────────────────────────────────────────
 #  TRANSCRIÇÃO
@@ -269,7 +274,7 @@ class TranscriptionSegment(BaseModel):
 
 class TranscriptionRequest(BaseModel):
     video_path: str = Field(..., description="Caminho absoluto do vídeo no servidor")
-    model_size: str = Field(default="tiny", description="tiny | base | small | medium")
+    model_size: str = Field(default="base", description="tiny | base | small | medium")
 
 
 class TranscriptionResponse(BaseModel):

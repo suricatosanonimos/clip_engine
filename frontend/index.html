@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Clip Engine — Crie Shorts e Reels com IA</title>
+    <link rel="stylesheet" href="styles/main.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+</head>
+<body>
+    <!-- NAVBAR -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-brand">
+                <div class="logo-icon">🎬</div>
+                <span class="logo-text">Clip<span>Engine</span></span>
+            </div>
+            <div class="nav-links">
+                <a href="#features">Funcionalidades</a>
+                <a href="#pricing">Planos</a>
+                <a href="#results">Resultados</a>
+                <a href="#" class="btn btn-outline">Entrar</a>
+                <a href="#" class="btn btn-primary">Começar Grátis</a>
+            </div>
+            <button class="mobile-toggle" aria-label="Menu">
+                <span></span><span></span><span></span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- HERO -->
+    <section class="hero">
+        <div class="container">
+            <div class="hero-grid">
+                <div class="hero-content">
+                    <div class="badge">✨ Nova atualização 2.0</div>
+                    <h1>Transforme vídeos longos em <span>Shorts & Reels</span> automaticamente</h1>
+                    <p class="hero-subtitle">Com tracking de rosto, legendas word-by-word e IA para encontrar os melhores momentos — tudo em minutos.</p>
+                    <div class="hero-actions">
+                        <a href="#" class="btn btn-primary btn-large">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5,3 19,12 5,21"/></svg>
+                            Testar Agora
+                        </a>
+                        <a href="#" class="btn btn-outline btn-large">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10,8 16,12 10,16"/></svg>
+                            Ver Demo
+                        </a>
+                    </div>
+                    <div class="hero-stats">
+                        <div class="stat">
+                            <span class="stat-number">10K+</span>
+                            <span class="stat-label">Clipes gerados</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-number">4.8</span>
+                            <span class="stat-label">⭐ Avaliação</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-number">2min</span>
+                            <span class="stat-label">Tempo médio</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="hero-image">
+                    <div class="demo-phone">
+                        <div class="phone-content">
+                            <div class="phone-header">
+                                <span>🎬 Clip Engine</span>
+                                <span class="phone-badge">Processando</span>
+                            </div>
+                            <div class="phone-preview">
+                                <div class="preview-video">
+                                    <div class="play-btn">▶</div>
+                                </div>
+                                <div class="preview-caption">
+                                    <span class="caption-text">Aprenda chinês em 30 dias 🇨🇳</span>
+                                    <div class="caption-timeline"></div>
+                                </div>
+                            </div>
+                            <div class="phone-footer">
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: 67%"></div>
+                                </div>
+                                <span class="progress-text">67%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section class="features" id="features">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">⚡ Funcionalidades</span>
+                <h2>Tudo que você precisa para criar conteúdo viral</h2>
+                <p>Pipeline completo automatizado com as melhores tecnologias de IA e processamento de vídeo.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🎯</div>
+                    <h3>Face Tracking</h3>
+                    <p>Detecção e tracking do rosto em tempo real com MediaPipe. Crop dinâmico no formato 9:16.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📝</div>
+                    <h3>Legendas Word-by-Word</h3>
+                    <p>Transcrição com Whisper e legendas estilo Alex Hormozi — palavra por palavra com cores.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">☁️</div>
+                    <h3>Cloud Storage</h3>
+                    <p>Clipes salvos automaticamente no Supabase com URLs assinadas por 7 dias.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">⚡</div>
+                    <h3>SSE em Tempo Real</h3>
+                    <p>Acompanhe o progresso do pipeline com SSE — sem polling, atualizações instantâneas.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🎨</div>
+                    <h3>Cores da Legenda</h3>
+                    <p>Escolha entre 4 cores: Branco, Amarelo, Azul ou Verde. Preview em tempo real.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📱</div>
+                    <h3>App Android</h3>
+                    <p>App nativo em Flet com download direto no dispositivo. Interface clean e rápida.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section class="how-it-works">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">🚀 Como funciona</span>
+                <h2>Pipeline automático em 4 passos</h2>
+            </div>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <h3>Cole a URL ou faça upload</h3>
+                        <p>Insira a URL do YouTube ou envie seu vídeo diretamente pelo app.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <h3>IA encontra os melhores momentos</h3>
+                        <p>Brain IA analisa o conteúdo e seleciona os trechos mais interessantes.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <h3>Tracking + Legendas</h3>
+                        <p>MediaPipe acompanha o rosto e Whisper gera legendas word-by-word.</p>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <h3>Clipes prontos na galeria</h3>
+                        <p>Baixe os clipes no formato Shorts/Reels e publique nas redes.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- RESULTS -->
+    <section class="results" id="results">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">🎬 Resultados</span>
+                <h2>Clipes gerados pelo Clip Engine</h2>
+            </div>
+            <div class="results-grid">
+                <div class="result-card">
+                    <div class="result-thumbnail">
+                        <div class="play-overlay">▶</div>
+                    </div>
+                    <div class="result-info">
+                        <h4>SE você ESTA CONFUSO VEJA ESSE VIDEO</h4>
+                        <span class="result-date">Hoje • 2.4K views</span>
+                    </div>
+                </div>
+                <div class="result-card">
+                    <div class="result-thumbnail">
+                        <div class="play-overlay">▶</div>
+                    </div>
+                    <div class="result-info">
+                        <h4>ONDE ESTÁ O RESTANTE DO DINHEIRO DO BLUZEIRA?</h4>
+                        <span class="result-date">Ontem • 1.8K views</span>
+                    </div>
+                </div>
+                <div class="result-card">
+                    <div class="result-thumbnail">
+                        <div class="play-overlay">▶</div>
+                    </div>
+                    <div class="result-info">
+                        <h4>COMO A IA MOVIMENTA BILHÕES E VOCÊ NEM IMAGINA</h4>
+                        <span class="result-date">2 dias • 3.1K views</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="cta">
+        <div class="container">
+            <div class="cta-content">
+                <h2>Pronto para criar conteúdo viral?</h2>
+                <p>Comece gratuitamente. Gere até 3 clipes por dia sem custo.</p>
+                <div class="cta-actions">
+                    <a href="#" class="btn btn-primary btn-large">Começar Grátis</a>
+                    <a href="#" class="btn btn-outline btn-light">Ver Planos</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-brand">
+                    <div class="logo-icon">🎬</div>
+                    <span class="logo-text">Clip<span>Engine</span></span>
+                    <p>Transforme vídeos longos em Shorts e Reels automaticamente com IA.</p>
+                </div>
+                <div class="footer-links">
+                    <h4>Produto</h4>
+                    <a href="#">Funcionalidades</a>
+                    <a href="#">Planos</a>
+                    <a href="#">Blog</a>
+                    <a href="#">Changelog</a>
+                </div>
+                <div class="footer-links">
+                    <h4>Desenvolvedor</h4>
+                    <a href="#">Documentação</a>
+                    <a href="#">API</a>
+                    <a href="#">GitHub</a>
+                    <a href="#">Status</a>
+                </div>
+                <div class="footer-links">
+                    <h4>Empresa</h4>
+                    <a href="#">Sobre</a>
+                    <a href="#">Contato</a>
+                    <a href="#">Privacy</a>
+                    <a href="#">Terms</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <span>© 2026 Clip Engine. Feito com ❤️ por Gilderlan</span>
+                <div class="social-links">
+                    <a href="#">📺</a>
+                    <a href="#">🐦</a>
+                    <a href="#">📸</a>
+                    <a href="#">💻</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="scripts/main.js"></script>
+</body>
+</html>

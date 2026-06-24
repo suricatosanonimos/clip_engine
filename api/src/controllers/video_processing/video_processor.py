@@ -128,14 +128,6 @@ class VideoProcessor:
 
     # ──────────────────────────────────────────────────────────────
     #  SAFETY NET — compatibilidade com OpenCV
-    #
-    #  O downloader já baixa H264 por padrão.
-    #  Este método existe apenas para o caso raro em que o YouTube
-    #  não tinha H264 disponível e o fallback "best" pegou AV1/VP9.
-    #
-    #  NUNCA lança exceção — se falhar, retorna o original e
-    #  deixa o VideoProcessor tentar (vai falhar em frames=0
-    #  mas não derruba o pipeline inteiro).
     # ──────────────────────────────────────────────────────────────
 
     def _converter_para_opencv(self, video_path: Path) -> Path:
@@ -190,7 +182,6 @@ class VideoProcessor:
             )
             return convertido
 
-        # Conversão falhou — loga e retorna original (será rejeitado em frames=0)
         print(f"{time_for_logs()} ❌ Conversão falhou. Usando original (pode falhar).")
         print(f"    ffmpeg stderr: {result.stderr[-300:]}")
         return video_path
@@ -300,52 +291,25 @@ class VideoProcessor:
     ) -> np.ndarray:
         """
         Adiciona marca d'água estilo TikTok que se move pela tela.
-
-        Args:
-            frame: Frame do vídeo (array numpy)
-            alpha: Transparência da marca (0-1)
-            change_interval: Intervalo em segundos para mudar de posição
-
-        Returns:
-            Frame com marca d'água aplicada
         """
-        # ============================================================
-        # 1. VALIDAÇÃO - Se frame é None, retorna sem modificar
-        # ============================================================
         if frame is None:
             return frame
 
-        # ============================================================
-        # 2. OBTÉM DIMENSÕES DO FRAME
-        # ============================================================
         h, w = frame.shape[:2]
-
-        # ============================================================
-        # 3. CONFIGURA TAMANHO DA FONTE DINÂMICO
-        # ============================================================
         text = "CLIP ENGINE"
         font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = min(h, w) / 400  # Ajusta automaticamente
-        font_scale = max(1.0, min(font_scale, 3.0))  # Limita entre 1.0 e 3.0
+        font_scale = min(h, w) / 400
+        font_scale = max(1.0, min(font_scale, 3.0))
         thickness = max(2, int(font_scale * 1.5))
 
-        # ============================================================
-        # 4. CALCULA TAMANHO DO TEXTO
-        # ============================================================
         (text_w, text_h), _ = cv2.getTextSize(text, font, font_scale, thickness)
 
-        # ============================================================
-        # 5. GERENCIA POSIÇÃO MÓVEL (ESTILO TIKTOK)
-        # ============================================================
-        # Verifica se deve mudar de posição (a cada change_interval segundos)
         frames_to_change = int(self.fps * change_interval)
 
         if (
             self._watermark_frame_counter - self._watermark_last_change
         ) >= frames_to_change:
-            # Define posições predefinidas (estilo TikTok)
             positions = [
-                # (x_percent, y_percent, nome)
                 (5, 90, "canto_inferior_esquerdo"),
                 (75, 5, "canto_superior_direito"),
                 (5, 5, "canto_superior_esquerdo"),
@@ -354,60 +318,39 @@ class VideoProcessor:
                 (40, 10, "meio_superior"),
             ]
 
-            # Escolhe posição aleatória
             x_percent, y_percent, pos_name = random.choice(positions)
-
-            # Calcula posição em pixels
             self._watermark_pos_x = int((w - text_w) * (x_percent / 100))
             self._watermark_pos_y = int((h - text_h) * (y_percent / 100))
-
-            # Garante que não fique fora da tela
             self._watermark_pos_x = max(10, min(self._watermark_pos_x, w - text_w - 10))
             self._watermark_pos_y = max(10, min(self._watermark_pos_y, h - text_h - 10))
-
             self._watermark_last_change = self._watermark_frame_counter
             self._watermark_pos_name = pos_name
 
-            # Log (opcional - descomente se quiser ver)
-            # print(f"🔄 Marca d'água movida para: {pos_name}")
-
-        # ============================================================
-        # 6. CRIA OVERLAY COM TEXTO
-        # ============================================================
         overlay = frame.copy()
 
-        # Desenha sombra (contorno preto)
         cv2.putText(
             overlay,
             text,
             (self._watermark_pos_x, self._watermark_pos_y),
             font,
             font_scale,
-            (0, 0, 0),  # Preto
+            (0, 0, 0),
             thickness + 2,
             cv2.LINE_AA,
         )
 
-        # Desenha texto principal (branco)
         cv2.putText(
             overlay,
             text,
             (self._watermark_pos_x, self._watermark_pos_y),
             font,
             font_scale,
-            (255, 255, 255),  # Branco
+            (255, 255, 255),
             thickness,
             cv2.LINE_AA,
         )
 
-        # ============================================================
-        # 7. MISTURA COM TRANSPARÊNCIA
-        # ============================================================
         cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
-
-        # ============================================================
-        # 8. INCREMENTA CONTADOR DE FRAMES
-        # ============================================================
         self._watermark_frame_counter += 1
 
         return frame
@@ -464,12 +407,16 @@ class VideoProcessor:
         return detections, mesh_results
 
     # ──────────────────────────────────────────────────────────────
-    #  GERAÇÃO DE CLIPES
+    #  GERAÇÃO DE CLIPES (COM INTEGRAÇÃO DO TranscriberVideo)
     # ──────────────────────────────────────────────────────────────
 
     def create_clip_with_precise_tracking(
         self, video_path: Path, start: float, end: float, index: int
     ) -> Optional[Path]:
+        """
+        Cria clipe com tracking e SEM ÁUDIO.
+        O áudio será adicionado posteriormente pelo TranscriberVideo.
+        """
         duration = end - start
         output = self.raw_dir / f"{video_path.stem}_clip_{index:02d}.mp4"
 
@@ -489,7 +436,7 @@ class VideoProcessor:
         cap.set(cv2.CAP_PROP_POS_MSEC, start * 1000)
 
         fps = cap.get(cv2.CAP_PROP_FPS) or 30
-        self.fps = fps  # Atualiza o FPS para a marca d'água
+        self.fps = fps
         
         frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -512,7 +459,6 @@ class VideoProcessor:
         previous_faces = {}
         start_time = last_log_time = time.time()
 
-        # Reseta o contador da marca d'água para cada clipe
         self._watermark_frame_counter = 0
         self._watermark_last_change = 0
 
@@ -557,61 +503,43 @@ class VideoProcessor:
             f"{time_for_logs()} ✅ Renderizado: {frames_processed} frames em {elapsed:.1f}s"
         )
 
-        if frames_processed > 0:
-            return self._add_audio_to_video(video_path, output, start, duration)
+        # ── RETORNA O CLIPE SEM ÁUDIO ──
+        # O áudio será adicionado pelo TranscriberVideo durante o processamento de legendas
+        if frames_processed > 0 and output.exists():
+            return output
         return None
 
-    def _add_audio_to_video(
-        self, source_video: Path, video_no_audio: Path, start: float, duration: float
-    ) -> Optional[Path]:
-        output_wa = (
-            video_no_audio.parent
-            / f"{video_no_audio.stem}_with_audio{video_no_audio.suffix}"
-        )
-        cmd = [
-            self.ffmpeg,
-            "-i",
-            str(video_no_audio),
-            "-ss",
-            str(start),
-            "-i",
-            str(source_video),
-            "-t",
-            str(duration),
-            "-c:v",
-            "copy",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k",
-            "-map",
-            "0:v:0",
-            "-map",
-            "1:a:0",
-            "-shortest",
-            "-y",
-            str(output_wa),
-        ]
-        try:
-            subprocess.run(cmd, check=True, capture_output=True)
-            video_no_audio.unlink()
-            output_wa.rename(video_no_audio)
-            print(f"{time_for_logs()} Áudio adicionado")
-            return video_no_audio
-        except subprocess.CalledProcessError as e:
-            print(f"{time_for_logs()} Erro ao adicionar áudio: {e}")
-            return video_no_audio
+    # ─── MÉTODO REMOVIDO: _add_audio_to_video ─────────────────────
+    # O áudio agora é gerenciado pelo TranscriberVideo para evitar
+    # processamento duplicado e garantir a extração correta.
 
     def _create_clip_ffmpeg(
-        self, video_path: Path, start: float, end: float, index: int
-    ) -> Optional[Path]:
+    self, video_path: Path, start: float, end: float, index: int
+) -> Optional[Path]:
         """Fallback sem tracking — corte direto com FFmpeg."""
         duration = end - start
         output = self.raw_dir / f"{video_path.stem}_clip_{index:02d}.mp4"
         info = self._get_video_info(video_path)
-        crop_width = int(info["height"] * 0.75)
-        crop_x = (info["width"] - crop_width) // 2
-        crop_filter = f"crop={crop_width}:{info['height']}:{crop_x}:0,scale=720:1280"
+        
+        width = info["width"]
+        height = info["height"]
+        
+        # ── Verifica se o vídeo já está no formato correto ──
+        # Se o vídeo já é vertical (9:16) e tem resolução próxima, mantém
+        aspect_ratio = width / height
+        
+        # Se já está próximo de 9:16 (vertical), não faz crop
+        if aspect_ratio < 0.7:  # Vídeo vertical
+            crop_filter = f"scale=720:1280"
+        else:
+            # Vídeo horizontal: faz crop central para 9:16
+            crop_width = int(height * 0.75)  # Altura * 9/16 ≈ 0.5625, mas usamos 0.75 para dar margem
+            crop_x = (width - crop_width) // 2
+            if crop_x >= 0 and crop_width <= width:
+                crop_filter = f"crop={crop_width}:{height}:{crop_x}:0,scale=720:1280"
+            else:
+                # Fallback: apenas escala mantendo proporção
+                crop_filter = f"scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2"
 
         cmd = [
             self.ffmpeg,
@@ -631,10 +559,7 @@ class VideoProcessor:
             "23",
             "-pix_fmt",
             "yuv420p",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k",
+            "-an",  # Remove áudio
             "-y",
             str(output),
         ]
@@ -643,6 +568,9 @@ class VideoProcessor:
             return output if output.exists() else None
         except subprocess.CalledProcessError as e:
             print(f"{time_for_logs()} Erro no FFmpeg fallback: {e}")
+            print(f"{time_for_logs()} Comando: {' '.join(cmd)}")
+            if e.stderr:
+                print(f"{time_for_logs()} stderr: {e.stderr.decode()[-500:]}")
             return None
 
     def create_clip(
@@ -663,26 +591,18 @@ class VideoProcessor:
 
     async def process(self, video_name: str, tracking: bool = True) -> List[Path]:
         """
-        Processa um vídeo gerando clipes.
-        
-        Args:
-            video_name: Nome do arquivo de vídeo
-            tracking: Se True, usa face tracking; se False, usa FFmpeg fallback
-            
-        Returns:
-            Lista de caminhos dos clipes gerados
+        Processa um vídeo gerando clipes SEM ÁUDIO.
+        O áudio será adicionado pelo TranscriberVideo durante a etapa de legendas.
         """
         # ── Resolve caminho ───────────────────────────────────────
         video_path = self.in_dir / video_name
 
-        # Fallback: sem sufixo _safe
         if not video_path.exists() and "_safe" in video_name:
             candidato = self.in_dir / video_name.replace("_safe", "")
             if candidato.exists():
                 video_path = candidato
                 video_name = video_path.name
 
-        # Fallback: busca por stem parecido
         if not video_path.exists():
             stem = Path(video_name).stem.replace("_safe", "")
             candidatos = [
@@ -703,10 +623,8 @@ class VideoProcessor:
         print(f"{time_for_logs()} Processando vídeo: {video_name}")
         print(f"{time_for_logs()} Caminho: {video_path}")
 
-        # ── Safety net — só age se downloader falhou em pegar H264 ─
         video_path = await asyncio.to_thread(self._garantir_compatibilidade, video_path)
 
-        # ── Gera clipes ───────────────────────────────────────────
         info = self._get_video_info(video_path)
         timestamps = self._generate_timestamps(info["duration"])
         print(
@@ -733,7 +651,7 @@ class VideoProcessor:
                 clips.append(clip)
                 print(
                     f"{time_for_logs()} ✅ Clipe: {clip.name} "
-                    f"({clip.stat().st_size / 1024 / 1024:.1f} MB)"
+                    f"({clip.stat().st_size / 1024 / 1024:.1f} MB) - SEM ÁUDIO"
                 )
             elif clip and clip.exists():
                 print(
@@ -741,7 +659,6 @@ class VideoProcessor:
                 )
                 clip.unlink()
 
-        # ── Limpa _cv2 se usado ───────────────────────────────────
         if "_cv2" in video_path.name:
             try:
                 video_path.unlink()

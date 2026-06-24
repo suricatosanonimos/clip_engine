@@ -17,7 +17,7 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 _MODEL = None
 
 
-def load_model(model_size: str = "tiny") -> WhisperModel:
+def load_model(model_size: str = "base") -> WhisperModel:
     """Carrega (ou retorna em cache) o modelo Whisper"""
     global _MODEL
     
@@ -44,7 +44,7 @@ def load_model(model_size: str = "tiny") -> WhisperModel:
 
 def get_model(model_size: Optional[str] = None) -> WhisperModel:
     """Interface pública para obter o modelo"""
-    return load_model(model_size or "tiny")
+    return load_model(model_size or "base")
 
 
 # Para compatibilidade

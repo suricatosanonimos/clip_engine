@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Novo Projeto — Clip Engine</title>
+    <link rel="stylesheet" href="styles/main.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet" />
+</head>
+<body class="dashboard-page">
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <span class="material-icons logo-icon">movie</span>
+            <span class="logo-text">Clip<span>Engine</span></span>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="#">
+                <span class="material-icons">dashboard</span>
+                Dashboard
+            </a>
+            <a href="#" class="active">
+                <span class="material-icons">add_box</span>
+                Novo Projeto
+            </a>
+            <a href="#">
+                <span class="material-icons">grid_view</span>
+                Galeria
+            </a>
+            <a href="#">
+                <span class="material-icons">hourglass_top</span>
+                Processando
+            </a>
+            <a href="#">
+                <span class="material-icons">workspace_premium</span>
+                Planos
+            </a>
+        </nav>
+        <div class="sidebar-user">
+            <div class="user-avatar">G</div>
+            <div class="user-info">
+                <span class="user-name">Gilderlan</span>
+                <span class="user-email">lansilva007gg@gmail.com</span>
+            </div>
+            <button class="logout-btn">
+                <span class="material-icons">logout</span>
+            </button>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <header class="main-header">
+            <div class="header-left">
+                <h1>Novo Projeto</h1>
+                <span class="header-subtitle">Configure seu vídeo e gere clipes automaticamente.</span>
+            </div>
+        </header>
+
+        <div class="new-project-container">
+            <!-- INPUT SOURCE -->
+            <section class="project-section">
+                <h2>
+                    <span class="material-icons section-icon">video_library</span>
+                    Fonte do Vídeo
+                </h2>
+                <div class="source-tabs">
+                    <button class="source-tab active">
+                        <span class="material-icons">link</span>
+                        URL do YouTube
+                    </button>
+                    <button class="source-tab">
+                        <span class="material-icons">upload_file</span>
+                        Upload de Arquivo
+                    </button>
+                </div>
+                <div class="source-input">
+                    <input 
+                        type="text" 
+                        id="video-url-input"
+                        placeholder="https://www.youtube.com/watch?v=..." 
+                        class="input-field" 
+                    />
+                    <button id="search-info-btn" class="btn btn-primary">
+                        <span class="material-icons">search</span>
+                        Buscar Informações
+                    </button>
+                </div>
+                <div class="video-preview-placeholder">
+                    <span class="material-icons preview-icon">play_circle_outline</span>
+                    <span>Nenhum vídeo carregado</span>
+                    <small>Cole a URL para ver as informações</small>
+                </div>
+            </section>
+
+            <!-- SETTINGS -->
+            <section class="project-section">
+                <h2>
+                    <span class="material-icons section-icon">settings</span>
+                    Configurações
+                </h2>
+                <div class="settings-grid">
+                    <div class="setting-group">
+                        <label>Quantidade de Clipes</label>
+                        <div class="range-control">
+                            <input type="range" min="1" max="10" value="3" class="range-input" />
+                            <span class="range-value">3</span>
+                        </div>
+                    </div>
+                    <div class="setting-group">
+                        <label>Duração do Clipe</label>
+                        <div class="btn-group">
+                            <button class="btn-option active">30s</button>
+                            <button class="btn-option">60s</button>
+                            <button class="btn-option">90s</button>
+                        </div>
+                    </div>
+                    <div class="setting-group">
+                        <label>Formato</label>
+                        <div class="btn-group">
+                            <button class="btn-option active">
+                                <span class="material-icons">phone_android</span>
+                                9:16 (Shorts)
+                            </button>
+                            <button class="btn-option">
+                                <span class="material-icons">desktop_windows</span>
+                                16:9 (Landscape)
+                            </button>
+                        </div>
+                    </div>
+                    <div class="setting-group">
+                        <label>Face Tracking</label>
+                        <div class="toggle-group">
+                            <button class="btn-option active">
+                                <span class="material-icons">check_circle</span>
+                                Ativado
+                            </button>
+                            <button class="btn-option">
+                                <span class="material-icons">cancel</span>
+                                Desativado
+                            </button>
+                        </div>
+                    </div>
+                    <div class="setting-group">
+                        <label>Legendas</label>
+                        <div class="toggle-group">
+                            <button class="btn-option active">
+                                <span class="material-icons">check_circle</span>
+                                Ativado
+                            </button>
+                            <button class="btn-option">
+                                <span class="material-icons">cancel</span>
+                                Desativado
+                            </button>
+                        </div>
+                    </div>
+                    <div class="setting-group">
+                        <label>Cor da Legenda</label>
+                        <div class="color-picker">
+                            <button class="color-option active" style="background: #FFFFFF; border: 2px solid #1A1A2E;" title="Branco"></button>
+                            <button class="color-option" style="background: #FFD93D;" title="Amarelo"></button>
+                            <button class="color-option" style="background: #6C63FF;" title="Roxo"></button>
+                            <button class="color-option" style="background: #6BCB77;" title="Verde"></button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- AI ANALYSIS -->
+            <section class="project-section">
+                <h2>
+                    <span class="material-icons section-icon">psychology</span>
+                    Análise da IA
+                </h2>
+                <div class="ai-analysis">
+                    <div class="ai-suggestion">
+                        <span class="ai-badge">
+                            <span class="material-icons">lightbulb</span>
+                            Melhores momentos
+                        </span>
+                        <p>"A IA identificou 3 momentos de alto engajamento neste vídeo..."</p>
+                    </div>
+                    <div class="ai-suggestion">
+                        <span class="ai-badge">
+                            <span class="material-icons">title</span>
+                            Títulos sugeridos
+                        </span>
+                        <ul>
+                            <li>• O segredo que ninguém te conta</li>
+                            <li>• Como mudei minha vida em 30 dias</li>
+                            <li>• A verdade sobre o dinheiro</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SUBMIT -->
+            <div class="submit-section">
+                <button class="btn btn-primary btn-large">
+                    <span class="material-icons">play_arrow</span>
+                    Processar Vídeo
+                </button>
+                <span class="submit-info">Processamento leva aproximadamente 2-5 minutos</span>
+            </div>
+        </div>
+    </main>
+
+
+    <script src="scripts/new_project.js"></script>
+
+</body>
+</html>

@@ -1,6 +1,11 @@
 """
-GET /api/info        → informações do vídeo (título, duração, views…)
+src/api/routes/info.py
+
+Rotas para informações de vídeos do YouTube.
+─────────────────────────────────────────────────────────────
+GET  /api/info        → informações do vídeo (título, duração, views…)
 POST /api/info/titles → gera títulos virais com a Brain IA
+─────────────────────────────────────────────────────────────
 """
 
 from fastapi import APIRouter, HTTPException, status
@@ -10,11 +15,15 @@ from src.api.schemas import (
     VideoInfoRequest,
     VideoInfoResponse,
 )
-from src.controllers.youtube.get_info_video import GetInfoVideo
+from src.controllers.brain import BrainVideoInfo
 from src.utils.logs import logger
 
 router = APIRouter(prefix="/info", tags=["Info"])
 
+
+# ──────────────────────────────────────────────────────────────
+#  POST /api/info — Informações do vídeo
+# ──────────────────────────────────────────────────────────────
 
 @router.post(
     "/",
@@ -26,7 +35,7 @@ async def get_video_info(body: VideoInfoRequest):
     Consulta título, duração, canal e descrição sem fazer download.
     """
     try:
-        fetcher = GetInfoVideo(url=body.url)
+        fetcher = BrainVideoInfo(url=body.url)
         info = await fetcher.get_info()
 
         if not info:
@@ -47,6 +56,10 @@ async def get_video_info(body: VideoInfoRequest):
         )
 
 
+# ──────────────────────────────────────────────────────────────
+#  POST /api/info/titles — Geração de títulos com IA
+# ──────────────────────────────────────────────────────────────
+
 @router.post(
     "/titles",
     response_model=TitlesResponse,
@@ -55,26 +68,37 @@ async def get_video_info(body: VideoInfoRequest):
 async def generate_titles(body: TitlesRequest):
     """
     Obtém as informações do vídeo e usa a Brain IA para sugerir títulos.
-
-    Estratégia com fallback automático:
-    1. `brain.generate_titles()` — se existir no Brain
-    2. `brain.encontrar_melhores_momentos()` — extrai títulos dos momentos
-    3. Variações simples do título original (fallback sem IA)
     """
     try:
-        fetcher = GetInfoVideo(url=body.url)
+        fetcher = BrainVideoInfo(url=body.url)
         result = await fetcher.create_titles(num_titles=body.count)
 
+        # Verifica se houve erro
         if "error" in result:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=result["error"],
             )
 
+        # Log para debug
+        logger.info(f"Resultado da geração de títulos: {result}")
+
+        # Verifica se os campos necessários existem
+        video_title = result.get("video_title", "Vídeo sem título")
+        titles = result.get("titles", [])
+        count = result.get("count", len(titles))
+
+        # Se não tiver títulos, retorna erro
+        if not titles:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Não foi possível gerar títulos para este vídeo.",
+            )
+
         return TitlesResponse(
-            video_title=result["video_title"],
-            titles=result["titles"],
-            count=result["count"],
+            video_title=video_title,
+            titles=titles,
+            count=count,
         )
 
     except HTTPException:

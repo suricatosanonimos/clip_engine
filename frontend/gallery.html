@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Galeria — Clip Engine</title>
+    <link rel="stylesheet" href="styles/main.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+</head>
+<body class="dashboard-page">
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="logo-icon">🎬</div>
+            <span class="logo-text">Clip<span>Engine</span></span>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="#">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12L5 10M3 12L5 14M3 12H21"/><path d="M5 10L12 3L19 10"/><path d="M5 14L12 21L19 14"/></svg>
+                Dashboard
+            </a>
+            <a href="#">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4V20"/><path d="M4 12H20"/></svg>
+                Novo Projeto
+            </a>
+            <a href="#" class="active">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M8 2V22"/><path d="M16 2V22"/><path d="M2 8H22"/><path d="M2 16H22"/></svg>
+                Galeria
+            </a>
+            <a href="#">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6V12L16 14"/></svg>
+                Processando
+            </a>
+            <a href="#">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7L12 12L22 7L12 2Z"/><path d="M2 17L12 22L22 17"/><path d="M2 12L12 17L22 12"/></svg>
+                Planos
+            </a>
+        </nav>
+        <div class="sidebar-user">
+            <div class="user-avatar">G</div>
+            <div class="user-info">
+                <span class="user-name">Gilderlan</span>
+                <span class="user-email">lansilva007gg@gmail.com</span>
+            </div>
+            <button class="logout-btn">🚪</button>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <header class="main-header">
+            <div class="header-left">
+                <h1>Galeria</h1>
+                <span class="header-subtitle">Seus clipes prontos para download.</span>
+            </div>
+            <div class="header-right">
+                <div class="filter-group">
+                    <button class="filter-btn active">Todos</button>
+                    <button class="filter-btn">Hoje</button>
+                    <button class="filter-btn">Esta semana</button>
+                    <button class="filter-btn">Este mês</button>
+                </div>
+            </div>
+        </header>
+
+        <div class="gallery-grid">
+            <div class="gallery-item">
+                <div class="gallery-thumbnail">
+                    <div class="gallery-play">▶</div>
+                    <span class="gallery-duration">0:60</span>
+                </div>
+                <div class="gallery-info">
+                    <h4>Aprenda Chinês em 30 Dias</h4>
+                    <div class="gallery-meta">
+                        <span>📅 Hoje</span>
+                        <span>📊 4.8 ⭐</span>
+                        <span>📥 12 downloads</span>
+                    </div>
+                    <div class="gallery-actions">
+                        <button class="btn btn-outline btn-sm">👁️ Visualizar</button>
+                        <button class="btn btn-primary btn-sm">⬇️ Download</button>
+                        <button class="icon-btn-sm">⋮</button>
+                    </div>
+                </div>
+            </div>
+            <div class="gallery-item">
+                <div class="gallery-thumbnail">
+                    <div class="gallery-play">▶</div>
+                    <span class="gallery-duration">0:45</span>
+                </div>
+                <div class="gallery-info">
+                    <h4>O segredo da produtividade</h4>
+                    <div class="gallery-meta">
+                        <span>📅 Ontem</span>
+                        <span>📊 4.2 ⭐</span>
+                        <span>📥 8 downloads</span>
+                    </div>
+                    <div class="gallery-actions">
+                        <button class="btn btn-outline btn-sm">👁️ Visualizar</button>
+                        <button class="btn btn-primary btn-sm">⬇️ Download</button>
+                        <button class="icon-btn-sm">⋮</button>
+                    </div>
+                </div>
+            </div>
+            <div class="gallery-item">
+                <div class="gallery-thumbnail">
+                    <div class="gallery-play">▶</div>
+                    <span class="gallery-duration">0:90</span>
+                </div>
+                <div class="gallery-info">
+                    <h4>Como a IA movimenta bilhões</h4>
+                    <div class="gallery-meta">
+                        <span>📅 2 dias</span>
+                        <span>📊 4.9 ⭐</span>
+                        <span>📥 24 downloads</span>
+                    </div>
+                    <div class="gallery-actions">
+                        <button class="btn btn-outline btn-sm">👁️ Visualizar</button>
+                        <button class="btn btn-primary btn-sm">⬇️ Download</button>
+                        <button class="icon-btn-sm">⋮</button>
+                    </div>
+                </div>
+            </div>
+            <div class="gallery-item">
+                <div class="gallery-thumbnail">
+                    <div class="gallery-play">▶</div>
+                    <span class="gallery-duration">0:60</span>
+                </div>
+                <div class="gallery-info">
+                    <h4>Programador aposentado cria algo incrível</h4>
+                    <div class="gallery-meta">
+                        <span>📅 3 dias</span>
+                        <span>📊 4.5 ⭐</span>
+                        <span>📥 15 downloads</span>
+                    </div>
+                    <div class="gallery-actions">
+                        <button class="btn btn-outline btn-sm">👁️ Visualizar</button>
+                        <button class="btn btn-primary btn-sm">⬇️ Download</button>
+                        <button class="icon-btn-sm">⋮</button>
+                    </div>
+                </div>
+            </div>
+            <div class="gallery-item">
+                <div class="gallery-thumbnail">
+                    <div class="gallery-play">▶</div>
+                    <span class="gallery-duration">0:30</span>
+                </div>
+                <div class="gallery-info">
+                    <h4>O futuro da educação</h4>
+                    <div class="gallery-meta">
+                        <span>📅 4 dias</span>
+                        <span>📊 4.0 ⭐</span>
+                        <span>📥 6 downloads</span>
+                    </div>
+                    <div class="gallery-actions">
+                        <button class="btn btn-outline btn-sm">👁️ Visualizar</button>
+                        <button class="btn btn-primary btn-sm">⬇️ Download</button>
+                        <button class="icon-btn-sm">⋮</button>
+                    </div>
+                </div>
+            </div>
+            <div class="gallery-item">
+                <div class="gallery-thumbnail">
+                    <div class="gallery-play">▶</div>
+                    <span class="gallery-duration">0:75</span>
+                </div>
+                <div class="gallery-info">
+                    <h4>Marketing digital desmistificado</h4>
+                    <div class="gallery-meta">
+                        <span>📅 5 dias</span>
+                        <span>📊 4.7 ⭐</span>
+                        <span>📥 19 downloads</span>
+                    </div>
+                    <div class="gallery-actions">
+                        <button class="btn btn-outline btn-sm">👁️ Visualizar</button>
+                        <button class="btn btn-primary btn-sm">⬇️ Download</button>
+                        <button class="icon-btn-sm">⋮</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</body>
+</html>

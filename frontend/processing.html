@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Processando — Clip Engine</title>
+    <link rel="stylesheet" href="styles/main.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+</head>
+<body class="dashboard-page">
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="logo-icon">🎬</div>
+            <span class="logo-text">Clip<span>Engine</span></span>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="#">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12L5 10M3 12L5 14M3 12H21"/><path d="M5 10L12 3L19 10"/><path d="M5 14L12 21L19 14"/></svg>
+                Dashboard
+            </a>
+            <a href="#">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4V20"/><path d="M4 12H20"/></svg>
+                Novo Projeto
+            </a>
+            <a href="#">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M8 2V22"/><path d="M16 2V22"/><path d="M2 8H22"/><path d="M2 16H22"/></svg>
+                Galeria
+            </a>
+            <a href="#" class="active">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6V12L16 14"/></svg>
+                Processando
+            </a>
+            <a href="#">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7L12 12L22 7L12 2Z"/><path d="M2 17L12 22L22 17"/><path d="M2 12L12 17L22 12"/></svg>
+                Planos
+            </a>
+        </nav>
+        <div class="sidebar-user">
+            <div class="user-avatar">G</div>
+            <div class="user-info">
+                <span class="user-name">Gilderlan</span>
+                <span class="user-email">lansilva007gg@gmail.com</span>
+            </div>
+            <button class="logout-btn">🚪</button>
+        </div>
+    </aside>
+
+    <main class="main-content">
+        <header class="main-header">
+            <div class="header-left">
+                <h1>Processando</h1>
+                <span class="header-subtitle">Acompanhe o andamento dos seus projetos em tempo real.</span>
+            </div>
+        </header>
+
+        <div class="processing-container">
+            <!-- ACTIVE PROCESS -->
+            <section class="processing-card active">
+                <div class="processing-header">
+                    <div class="processing-title">
+                        <span class="status-badge processing">⏳ Processando</span>
+                        <h3>Aprendendo Chinês em 30 Dias</h3>
+                    </div>
+                    <span class="processing-time">Iniciado há 1min</span>
+                </div>
+                <div class="processing-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 67%;"></div>
+                    </div>
+                    <div class="progress-details">
+                        <span class="progress-label">67% — Processando vídeo...</span>
+                        <span class="progress-step">Etapa 2/4: Tracking de rosto</span>
+                    </div>
+                </div>
+                <div class="processing-steps">
+                    <div class="step-done">✅ Download</div>
+                    <div class="step-active">⏳ Tracking</div>
+                    <div class="step-pending">⏳ Legendas</div>
+                    <div class="step-pending">⏳ Upload</div>
+                </div>
+                <div class="processing-logs">
+                    <div class="log-line info">📥 Download concluído (14.2 MB)</div>
+                    <div class="log-line active">🔄 Processando tracking de rosto...</div>
+                    <div class="log-line muted">⏳ Aguardando próximo passo...</div>
+                </div>
+            </section>
+
+            <!-- QUEUED PROCESS -->
+            <section class="processing-card queued">
+                <div class="processing-header">
+                    <div class="processing-title">
+                        <span class="status-badge queued">⏳ Na fila</span>
+                        <h3>A Realidade da Guerra na Ucrânia</h3>
+                    </div>
+                    <span class="processing-time">Na fila • 1 projeto na frente</span>
+                </div>
+                <div class="processing-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 0%;"></div>
+                    </div>
+                    <div class="progress-details">
+                        <span class="progress-label">Aguardando processamento...</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- COMPLETED PROCESS -->
+            <section class="processing-card completed">
+                <div class="processing-header">
+                    <div class="processing-title">
+                        <span class="status-badge done">✅ Concluído</span>
+                        <h3>Como a IA Movimenta Bilhões</h3>
+                    </div>
+                    <span class="processing-time">Concluído há 2h</span>
+                </div>
+                <div class="processing-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 100%;"></div>
+                    </div>
+                    <div class="progress-details">
+                        <span class="progress-label">✅ 3 clipes gerados</span>
+                    </div>
+                </div>
+                <div class="processing-actions">
+                    <button class="btn btn-outline btn-sm">👁️ Ver na galeria</button>
+                    <button class="btn btn-primary btn-sm">⬇️ Baixar tudo</button>
+                </div>
+            </section>
+
+            <!-- ERROR PROCESS -->
+            <section class="processing-card error">
+                <div class="processing-header">
+                    <div class="processing-title">
+                        <span class="status-badge error">❌ Erro</span>
+                        <h3>Programador Aposentado Cria Algo Incrível</h3>
+                    </div>
+                    <span class="processing-time">Há 4h</span>
+                </div>
+                <div class="processing-error">
+                    <span class="error-icon">⚠️</span>
+                    <div>
+                        <strong>Falha no processamento</strong>
+                        <p>Erro ao baixar o vídeo. Verifique a URL e tente novamente.</p>
+                        <button class="btn btn-outline btn-sm">🔄 Tentar novamente</button>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+</body>
+</html>

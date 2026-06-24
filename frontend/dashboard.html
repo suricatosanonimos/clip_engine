@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard — Clip Engine</title>
+    <link rel="stylesheet" href="styles/main.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+</head>
+<body class="dashboard-page">
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+        <div class="sidebar-brand">
+            <div class="logo-icon">🎬</div>
+            <span class="logo-text">Clip<span>Engine</span></span>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="#" class="active">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12L5 10M3 12L5 14M3 12H21"/><path d="M5 10L12 3L19 10"/><path d="M5 14L12 21L19 14"/></svg>
+                Dashboard
+            </a>
+            <a href="#">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4V20"/><path d="M4 12H20"/></svg>
+                Novo Projeto
+            </a>
+            <a href="#">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="4"/><path d="M8 2V22"/><path d="M16 2V22"/><path d="M2 8H22"/><path d="M2 16H22"/></svg>
+                Galeria
+            </a>
+            <a href="#">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6V12L16 14"/></svg>
+                Processando
+            </a>
+            <a href="#">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7L12 12L22 7L12 2Z"/><path d="M2 17L12 22L22 17"/><path d="M2 12L12 17L22 12"/></svg>
+                Planos
+            </a>
+        </nav>
+        <div class="sidebar-user">
+            <div class="user-avatar">G</div>
+            <div class="user-info">
+                <span class="user-name">Gilderlan</span>
+                <span class="user-email">lansilva007gg@gmail.com</span>
+            </div>
+            <button class="logout-btn">🚪</button>
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+        <header class="main-header">
+            <div class="header-left">
+                <h1>Dashboard</h1>
+                <span class="header-subtitle">Bem-vindo de volta! Aqui estão seus projetos.</span>
+            </div>
+            <div class="header-right">
+                <button class="icon-btn">🔔</button>
+                <a href="#" class="btn btn-primary btn-sm">Novo Projeto +</a>
+            </div>
+        </header>
+
+        <!-- STATS -->
+        <section class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-card-icon">📹</div>
+                <div class="stat-card-info">
+                    <span class="stat-card-number">24</span>
+                    <span class="stat-card-label">Total de Clipes</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card-icon">⚡</div>
+                <div class="stat-card-info">
+                    <span class="stat-card-number">12</span>
+                    <span class="stat-card-label">Projetos</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card-icon">📊</div>
+                <div class="stat-card-info">
+                    <span class="stat-card-number">342</span>
+                    <span class="stat-card-label">Minutos processados</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-card-icon">🏆</div>
+                <div class="stat-card-info">
+                    <span class="stat-card-number">4.8</span>
+                    <span class="stat-card-label">⭐ Avaliação média</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- RECENT PROJECTS -->
+        <section class="recent-projects">
+            <div class="section-header-sm">
+                <h2>Projetos Recentes</h2>
+                <a href="#" class="link">Ver todos →</a>
+            </div>
+            <div class="projects-list">
+                <div class="project-item">
+                    <div class="project-info">
+                        <div class="project-thumbnail-small"></div>
+                        <div>
+                            <h4>Aprenda Chinês em 30 Dias</h4>
+                            <span class="project-meta">3 clipes • 60s cada • Há 2h</span>
+                        </div>
+                    </div>
+                    <div class="project-status">
+                        <span class="status-badge done">✅ Concluído</span>
+                    </div>
+                </div>
+                <div class="project-item">
+                    <div class="project-info">
+                        <div class="project-thumbnail-small"></div>
+                        <div>
+                            <h4>A Realidade da Guerra na Ucrânia</h4>
+                            <span class="project-meta">5 clipes • 60s cada • Há 5h</span>
+                        </div>
+                    </div>
+                    <div class="project-status">
+                        <span class="status-badge processing">⏳ Processando</span>
+                    </div>
+                </div>
+                <div class="project-item">
+                    <div class="project-info">
+                        <div class="project-thumbnail-small"></div>
+                        <div>
+                            <h4>Como a IA Movimenta Bilhões</h4>
+                            <span class="project-meta">2 clipes • 90s cada • Ontem</span>
+                        </div>
+                    </div>
+                    <div class="project-status">
+                        <span class="status-badge done">✅ Concluído</span>
+                    </div>
+                </div>
+                <div class="project-item">
+                    <div class="project-info">
+                        <div class="project-thumbnail-small"></div>
+                        <div>
+                            <h4>Programador Aposentado Cria Algo Incrível</h4>
+                            <span class="project-meta">4 clipes • 60s cada • Ontem</span>
+                        </div>
+                    </div>
+                    <div class="project-status">
+                        <span class="status-badge error">❌ Erro</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- QUICK ACTIONS -->
+        <section class="quick-actions">
+            <div class="action-card">
+                <div class="action-icon">📝</div>
+                <h3>Cole uma URL</h3>
+                <p>Processe vídeos do YouTube com um clique.</p>
+                <a href="#" class="btn btn-outline btn-sm">Começar</a>
+            </div>
+            <div class="action-card">
+                <div class="action-icon">📤</div>
+                <h3>Faça Upload</h3>
+                <p>Envie seus vídeos locais para processamento.</p>
+                <a href="#" class="btn btn-outline btn-sm">Começar</a>
+            </div>
+            <div class="action-card">
+                <div class="action-icon">🎨</div>
+                <h3>Configurar</h3>
+                <p>Ajuste cores, legendas e tracking.</p>
+                <a href="#" class="btn btn-outline btn-sm">Configurar</a>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

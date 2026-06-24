@@ -62,33 +62,107 @@ class VideoSplitterFast:
         Returns:
             Dicionário com: width, height, duration, fps, codec, etc.
         """
+        # ── Primeiro, verifica se o arquivo existe ──
+        if not video_path.exists():
+            raise FileNotFoundError(f"Arquivo não encontrado: {video_path}")
+        
+        if video_path.stat().st_size == 0:
+            raise ValueError(f"Arquivo vazio: {video_path}")
+        
+        # ── Comando ffprobe mais detalhado ──
         cmd = [
             "ffprobe",
             "-v", "error",
-            "-show_entries", "stream=width,height,codec_name,r_frame_rate",
+            "-show_entries", "stream=width,height,codec_name,r_frame_rate,codec_type",
             "-show_entries", "format=duration,size",
             "-of", "json",
             str(video_path),
         ]
         
         try:
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+            # ── Executa o ffprobe ──
+            result = subprocess.run(
+                cmd, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE, 
+                text=True, 
+                check=True
+            )
+            
+            # ── Parse do JSON ──
             data = json.loads(result.stdout)
             
-            # Extrai informações
+            # ── Busca a stream de vídeo ──
             video_stream = None
             for stream in data.get("streams", []):
                 if stream.get("codec_type") == "video":
                     video_stream = stream
                     break
             
+            # ── Se não encontrou stream de vídeo, tenta ler com ffmpeg diretamente ──
             if not video_stream:
-                raise ValueError("Nenhuma stream de vídeo encontrada")
+                print(f"⚠️  Nenhuma stream de vídeo encontrada no ffprobe, tentando ffmpeg...")
+                
+                # Tenta usar ffmpeg para obter informações
+                cmd_ffmpeg = [
+                    "ffmpeg",
+                    "-i", str(video_path),
+                    "-f", "null",
+                    "-"
+                ]
+                
+                try:
+                    result_ffmpeg = subprocess.run(
+                        cmd_ffmpeg,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True
+                    )
+                    
+                    # Extrai informações do stderr do ffmpeg
+                    stderr = result_ffmpeg.stderr
+                    
+                    # Tenta extrair resolução
+                    match_res = re.search(r'(\d+)x(\d+)', stderr)
+                    if match_res:
+                        width = int(match_res.group(1))
+                        height = int(match_res.group(2))
+                    else:
+                        raise ValueError("Não foi possível determinar a resolução")
+                    
+                    # Tenta extrair duração
+                    match_dur = re.search(r'Duration:\s*(\d+):(\d+):(\d+\.\d+)', stderr)
+                    if match_dur:
+                        h = int(match_dur.group(1))
+                        m = int(match_dur.group(2))
+                        s = float(match_dur.group(3))
+                        duration = h * 3600 + m * 60 + s
+                    else:
+                        raise ValueError("Não foi possível determinar a duração")
+                    
+                    # Tenta extrair FPS
+                    match_fps = re.search(r'(\d+\.?\d*)\s*fps', stderr)
+                    fps = float(match_fps.group(1)) if match_fps else 30.0
+                    
+                    return {
+                        "width": width,
+                        "height": height,
+                        "duration": duration,
+                        "fps": fps,
+                        "codec": "unknown",
+                        "size_bytes": video_path.stat().st_size,
+                    }
+                    
+                except Exception as e:
+                    raise ValueError(f"Não foi possível ler o vídeo com ffmpeg: {e}")
             
-            # Calcula FPS
+            # ── Extrai informações da stream de vídeo ──
             fps_str = video_stream.get("r_frame_rate", "30/1")
-            num, den = fps_str.split("/")
-            fps = float(num) / float(den) if den != "0" else 30.0
+            try:
+                num, den = fps_str.split("/")
+                fps = float(num) / float(den) if den != "0" else 30.0
+            except:
+                fps = 30.0
             
             return {
                 "width": int(video_stream.get("width", 0)),
@@ -100,7 +174,13 @@ class VideoSplitterFast:
             }
             
         except subprocess.CalledProcessError as e:
+            print(f"❌ ffprobe falhou: {e.stderr}")
+            print(f"   Comando: {' '.join(cmd)}")
             raise RuntimeError(f"ffprobe falhou: {e.stderr}") from e
+        except json.JSONDecodeError as e:
+            print(f"❌ Erro ao parsear JSON do ffprobe: {e}")
+            print(f"   Saída: {result.stdout[:200]}")
+            raise RuntimeError(f"Erro ao parsear JSON: {e}") from e
         except Exception as e:
             raise RuntimeError(f"Erro ao obter informações do vídeo: {e}") from e
 
@@ -120,9 +200,7 @@ class VideoSplitterFast:
             return (0, 0, width, height)
         
         # Vídeo horizontal: corta o centro para 9:16
-        # Altura alvo = altura original
         crop_height = height
-        # Largura alvo = altura * 9 / 16
         crop_width = int(height * 9 / 16)
         
         # Centraliza horizontalmente
@@ -171,13 +249,11 @@ class VideoSplitterFast:
         Returns:
             String com o filtro no formato: "crop=w:h:x:y,scale=W:H"
         """
-        # Filtro de corte + escala
         crop_filter = f"crop={crop_w}:{crop_h}:{start_x}:{start_y}"
         
-        # Escala para resolução alvo
         if self.output_format == "9:16":
             scale_filter = f"scale={self.target_width}:{self.target_height}"
-        else:  # 16:9
+        else:
             scale_filter = f"scale={self.landscape_width}:{self.landscape_height}"
         
         return f"{crop_filter},{scale_filter}"
@@ -192,32 +268,18 @@ class VideoSplitterFast:
     ) -> bool:
         """
         Corta vídeo e aplica transformação para 9:16 (com re-encode).
-        
-        Args:
-            input_path: Caminho do vídeo de entrada
-            output_path: Caminho do vídeo de saída
-            start_seconds: Tempo de início
-            end_seconds: Tempo de fim
-            video_info: Dicionário com informações do vídeo
-        
-        Returns:
-            True se bem-sucedido, False caso contrário
         """
         duration = end_seconds - start_seconds
         width = video_info["width"]
         height = video_info["height"]
         
-        # Calcula corte para 9:16 ou 16:9
         if self.output_format == "9:16":
             x, y, crop_w, crop_h = self._calculate_crop_9_16(width, height)
         else:
             x, y, crop_w, crop_h = self._calculate_crop_16_9(width, height)
         
-        # Constrói filtro
         filter_str = self._build_ffmpeg_filter(width, height, x, y, crop_w, crop_h)
         
-        # Comando FFmpeg com re-encode (necessário para crop e scale)
-        # Usa presets rápidos para manter qualidade
         command = [
             "ffmpeg",
             "-ss", str(start_seconds),
@@ -225,8 +287,8 @@ class VideoSplitterFast:
             "-t", str(duration),
             "-vf", filter_str,
             "-c:v", "libx264",
-            "-preset", "veryfast",      # Prioriza velocidade
-            "-crf", "23",               # Boa qualidade
+            "-preset", "veryfast",
+            "-crf", "23",
             "-pix_fmt", "yuv420p",
             "-c:a", "aac",
             "-b:a", "128k",
@@ -236,7 +298,7 @@ class VideoSplitterFast:
         ]
         
         try:
-            result = subprocess.run(
+            subprocess.run(
                 command, 
                 stdout=subprocess.PIPE, 
                 stderr=subprocess.PIPE, 
@@ -251,7 +313,6 @@ class VideoSplitterFast:
     def _fast_cut_copy(self, input_path: Path, output_path: Path, start_seconds: float, end_seconds: float) -> bool:
         """
         Corta vídeo SEM re-encode (extremamente rápido).
-        Útil quando o vídeo já está no formato correto.
         """
         duration = end_seconds - start_seconds
         
@@ -282,16 +343,6 @@ class VideoSplitterFast:
     ) -> List[Dict]:
         """
         Corta TODO o vídeo em clipes de X segundos.
-        
-        Args:
-            video_path: Caminho do vídeo
-            clip_duration: Duração de cada clipe em segundos
-            start_offset: Tempo de início em segundos
-            apply_transform: Se True, aplica transformação 9:16 (mais lento)
-                             Se False, apenas copia (mais rápido)
-        
-        Returns:
-            Lista de dicionários com metadados dos clipes
         """
         input_path = Path(video_path)
         clipes = []
@@ -316,7 +367,6 @@ class VideoSplitterFast:
         print(f"⏱️  Duração total: {duration:.2f}s")
         print(f"📱 Formato de saída: {self.output_format}")
         
-        # Verifica se precisa re-encode
         needs_transform = apply_transform and (
             width / height >= 1.2 if self.output_format == "9:16" else width / height < 1.3
         )
@@ -338,7 +388,6 @@ class VideoSplitterFast:
             current_end = min(current_start + clip_duration, duration)
             clip_dur = current_end - current_start
             
-            # Pula clipes muito curtos (< 5 segundos)
             if clip_dur < 5:
                 break
             
@@ -379,7 +428,6 @@ class VideoSplitterFast:
                 print(f"✅ {size_mb:.1f} MB")
             else:
                 print(f"❌ Falha")
-                # Em caso de falha, tenta modo copy (fallback)
                 if needs_transform:
                     print("   ⚡ Tentando fallback com copy codec...")
                     success_fallback = self._fast_cut_copy(
@@ -406,7 +454,6 @@ class VideoSplitterFast:
             current_start = current_end
             clip_index += 1
         
-        # Salvar metadados
         metadata_path = self.base_dir / f"{base_name}_clipes.json"
         with open(metadata_path, "w", encoding="utf-8") as f:
             json.dump(clipes, f, ensure_ascii=False, indent=2)
@@ -420,6 +467,16 @@ class VideoSplitterFast:
 
 
 if __name__ == "__main__":
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Corta vídeos em clipes")
+    parser.add_argument("--video", required=True, help="Caminho do vídeo")
+    parser.add_argument("--duration", type=int, default=60, help="Duração de cada clipe (segundos)")
+    parser.add_argument("--format", default="9:16", choices=["9:16", "16:9"], help="Formato de saída")
+    parser.add_argument("--output", help="Diretório de saída")
+    
+    args = parser.parse_args()
+    
     # Verificar FFmpeg
     try:
         subprocess.run(["ffmpeg", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -428,11 +485,9 @@ if __name__ == "__main__":
         print("❌ FFmpeg não encontrado! Instale com: sudo apt install ffmpeg")
         sys.exit(1)
     
-    # Caminho do vídeo
-    VIDEO_PATH = "/home/dev/Code/clip_engine/api/src/services/clip_engine/A_REALIDADE_DA_GUERRA_NA_UCRÂNIA_CRISTIAN_GALVÃO_RELATA_AS_PIORES_PARTES_DO_CONFRONTO.mp4"
-    
-    if not Path(VIDEO_PATH).exists():
-        print(f"❌ Vídeo não encontrado: {VIDEO_PATH}")
+    # Verificar se o vídeo existe
+    if not Path(args.video).exists():
+        print(f"❌ Vídeo não encontrado: {args.video}")
         print("   Verifique o caminho e tente novamente.")
         sys.exit(1)
     
@@ -440,27 +495,19 @@ if __name__ == "__main__":
     print("🎬 FASE 1: Corte Rápido do Vídeo")
     print("=" * 60)
     
-    # Criar instância com formato 9:16 (Shorts/Reels/TikTok)
+    output_dir = Path(args.output) if args.output else Path("/home/dev/Code/clip_engine/parts")
+    
     splitter = VideoSplitterFast(
-        base_dir=Path("/home/dev/Code/clip_engine/parts"),
-        output_format="9:16",  # ou "16:9" para paisagem
+        base_dir=output_dir,
+        output_format=args.format,
         crop_mode="center"
     )
     
-    # Processar vídeo
     clipes = splitter.split_all_clips(
-        video_path=VIDEO_PATH,
-        clip_duration=60,      # 60 segundos por clipe
+        video_path=args.video,
+        clip_duration=args.duration,
         start_offset=0,
-        apply_transform=True   # Aplica transformação 9:16
+        apply_transform=True
     )
     
-    print(f"\n📋 {len(clipes)} clipes prontos para processamento com IA!")
-    
-    # Mostrar resumo dos clipes
-    if clipes:
-        print("\n📊 Resumo dos clipes:")
-        for i, clip in enumerate(clipes[:5], 1):
-            print(f"   {i}. {clip['filename']} ({clip['duration']}s, {clip['size_mb']} MB)")
-        if len(clipes) > 5:
-            print(f"   ... e mais {len(clipes) - 5} clipes")
+    print(f"\n📋 {len(clipes)} clipes prontos para processamento!")
