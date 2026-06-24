@@ -5,10 +5,12 @@
  * ═══════════════════════════════════════════════════════════
  * 
  *  Rotas da API:
- *  - POST /api/info         → informações do vídeo
- *  - POST /api/info/titles  → gera títulos virais com IA
+ *  - POST /api/info          → informações do vídeo
+ *  - POST /api/info/titles   → gera títulos virais com IA
  *  - POST /api/video/process → inicia processamento do vídeo
- *  - GET  /api/status/{id}  → status do processamento
+ *  - GET  /api/status/{id}   → status do processamento
+ *  - POST /api/jobs          → cria job no banco
+ *  - GET  /api/clips         → lista clipes do usuário
  * ═══════════════════════════════════════════════════════════
  */
 
@@ -19,8 +21,8 @@ class NewProjectManager {
             apiBaseUrl: config.apiBaseUrl || 'http://localhost:8000',
             inputSelector: '#video-url-input',
             buttonSelector: '#search-info-btn',
-            previewSelector: '.video-preview-placeholder',
-            processButtonSelector: '.submit-section .btn-primary'
+            previewSelector: '#video-preview',
+            processButtonSelector: '#process-video-btn'
         };
 
         // ── Endpoints da API ──────────────────────────────
@@ -28,7 +30,10 @@ class NewProjectManager {
             videoInfo: `${this.config.apiBaseUrl}/api/info`,
             titles: `${this.config.apiBaseUrl}/api/info/titles`,
             process: `${this.config.apiBaseUrl}/api/video/process`,
-            status: (taskId) => `${this.config.apiBaseUrl}/api/status/${taskId}`
+            jobs: `${this.config.apiBaseUrl}/api/jobs`,
+            clips: `${this.config.apiBaseUrl}/api/clips`,
+            status: (taskId) => `${this.config.apiBaseUrl}/api/status/${taskId}`,
+            statusStream: (taskId) => `${this.config.apiBaseUrl}/api/status/${taskId}/stream`
         };
 
         // ── DOM Elements ──────────────────────────────────
@@ -45,12 +50,17 @@ class NewProjectManager {
             currentUrl: '',
             videoInfo: null,
             titles: [],
+            jobId: null,
+            taskId: null,
+            userId: 'user_test_001',
             settings: {
                 numClips: 3,
                 clipDuration: 60,
+                format: '9:16',
                 tracking: true,
                 subtitles: true,
-                subtitleColor: 'white'
+                subtitleColor: 'white',
+                sourceType: 'youtube'
             }
         };
 
@@ -91,64 +101,120 @@ class NewProjectManager {
         this._setupSettingsListeners();
         this.showEmptyState();
 
+        // Verifica se veio task_id da URL
+        this._checkTaskIdFromUrl();
+
         console.log('✅ [NewProjectManager] Inicializado!');
+        console.log('📊 Estado inicial:', this.state.settings);
     }
 
     // ──────────────────────────────────────────────────────────────
-    //  SETTINGS LISTENERS
+    //  SETTINGS LISTENERS - CORRIGIDO COM IDs E DATA ATTRIBUTES
     // ──────────────────────────────────────────────────────────────
 
     _setupSettingsListeners() {
-        // Range de clipes
-        const range = document.querySelector('.range-input');
+        // ── Range de clipes ──
+        const range = document.getElementById('num-clips-range');
         if (range) {
             range.addEventListener('input', (e) => {
-                this.state.settings.numClips = parseInt(e.target.value);
-                const display = document.querySelector('.range-value');
-                if (display) display.textContent = this.state.settings.numClips;
+                const value = parseInt(e.target.value);
+                this.state.settings.numClips = value;
+                const display = document.getElementById('num-clips-value');
+                if (display) display.textContent = value;
+                console.log(`📊 Clipes: ${value}`);
             });
         }
 
-        // Duração
-        document.querySelectorAll('.setting-group .btn-group:first-child .btn-option').forEach(btn => {
+        // ── Duração ──
+        document.querySelectorAll('#duration-group .btn-option').forEach(btn => {
             btn.addEventListener('click', () => {
-                document.querySelectorAll('.setting-group .btn-group:first-child .btn-option')
-                    .forEach(b => b.classList.remove('active'));
+                // Remove active de todos
+                document.querySelectorAll('#duration-group .btn-option').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
-                this.state.settings.clipDuration = parseInt(btn.textContent.replace('s', ''));
+                const duration = parseInt(btn.dataset.duration);
+                this.state.settings.clipDuration = duration;
+                console.log(`⏱️ Duração: ${duration}s`);
             });
         });
 
-        // Tracking
-        document.querySelectorAll('.setting-group .toggle-group:first-child .btn-option').forEach(btn => {
+        // ── Formato ──
+        document.querySelectorAll('#format-group .btn-option').forEach(btn => {
             btn.addEventListener('click', () => {
-                document.querySelectorAll('.setting-group .toggle-group:first-child .btn-option')
-                    .forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('#format-group .btn-option').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
-                this.state.settings.tracking = btn.textContent.includes('Ativado');
+                const format = btn.dataset.format;
+                this.state.settings.format = format;
+                console.log(`📱 Formato: ${format}`);
             });
         });
 
-        // Legendas
-        document.querySelectorAll('.setting-group .toggle-group:nth-child(2) .btn-option').forEach(btn => {
+        // ── Tracking ──
+        document.querySelectorAll('#tracking-group .btn-option').forEach(btn => {
             btn.addEventListener('click', () => {
-                document.querySelectorAll('.setting-group .toggle-group:nth-child(2) .btn-option')
-                    .forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('#tracking-group .btn-option').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
-                this.state.settings.subtitles = btn.textContent.includes('Ativado');
+                const tracking = btn.dataset.tracking === 'true';
+                this.state.settings.tracking = tracking;
+                console.log(`🎯 Tracking: ${tracking ? 'Ativado' : 'Desativado'}`);
             });
         });
 
-        // Cores
-        const colorMap = { '#FFFFFF': 'white', '#FFD93D': 'yellow', '#6C63FF': 'blue', '#6BCB77': 'green' };
-        document.querySelectorAll('.color-option').forEach(btn => {
+        // ── Legendas ──
+        document.querySelectorAll('#subtitles-group .btn-option').forEach(btn => {
             btn.addEventListener('click', () => {
-                document.querySelectorAll('.color-option').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('#subtitles-group .btn-option').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
-                const bg = btn.style.backgroundColor || '#FFFFFF';
-                this.state.settings.subtitleColor = colorMap[bg] || 'white';
+                const subtitles = btn.dataset.subtitles === 'true';
+                this.state.settings.subtitles = subtitles;
+                console.log(`📝 Legendas: ${subtitles ? 'Ativado' : 'Desativado'}`);
             });
         });
+
+        // ── Cores ──
+        document.querySelectorAll('#color-picker .color-option').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('#color-picker .color-option').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const color = btn.dataset.color;
+                this.state.settings.subtitleColor = color;
+                console.log(`🎨 Cor: ${color}`);
+            });
+        });
+
+        // ── Fonte (Tabs) ──
+        document.querySelectorAll('#source-tabs .source-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('#source-tabs .source-tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                const source = tab.dataset.source;
+                this.state.settings.sourceType = source;
+                console.log(`📤 Fonte: ${source}`);
+                
+                // Muda placeholder do input
+                if (this.input) {
+                    if (source === 'youtube') {
+                        this.input.placeholder = 'https://www.youtube.com/watch?v=...';
+                    } else {
+                        this.input.placeholder = 'Selecione um arquivo de vídeo...';
+                    }
+                }
+            });
+        });
+
+        console.log('✅ Settings listeners configurados!');
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    //  CHECK TASK ID FROM URL
+    // ──────────────────────────────────────────────────────────────
+
+    _checkTaskIdFromUrl() {
+        const params = new URLSearchParams(window.location.search);
+        const taskId = params.get('task_id');
+        if (taskId) {
+            console.log(`📋 Task ID encontrado na URL: ${taskId}`);
+            this.state.taskId = taskId;
+        }
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -202,6 +268,7 @@ class NewProjectManager {
                 <div class="titles-loading">
                     <span class="material-icons loading-icon spin">sync</span>
                     <span>Gerando títulos com IA...</span>
+                    <small>Isso pode levar alguns segundos</small>
                 </div>
             `;
         }
@@ -212,7 +279,7 @@ class NewProjectManager {
                 this.state.titles = result.titles;
                 this.showTitles(result.titles);
             } else {
-                this.showTitlesError('Não foi possível gerar títulos.');
+                this.showTitlesError('Não foi possível gerar títulos. Tente novamente.');
             }
         } catch (err) {
             this.showTitlesError(err.message || 'Erro ao gerar títulos.');
@@ -227,11 +294,15 @@ class NewProjectManager {
             return this.showError('Busque as informações do vídeo primeiro.');
         }
 
+        // Mostra as configurações atuais
+        const settings = this.state.settings;
         const msg = `Processar "${this.state.videoInfo?.title || 'Vídeo'}"?\n\n` +
-            `Clipes: ${this.state.settings.numClips}\n` +
-            `Duração: ${this.state.settings.clipDuration}s\n` +
-            `Tracking: ${this.state.settings.tracking ? 'Ativado' : 'Desativado'}\n` +
-            `Legendas: ${this.state.settings.subtitles ? 'Ativado' : 'Desativado'}`;
+            `Clipes: ${settings.numClips}\n` +
+            `Duração: ${settings.clipDuration}s\n` +
+            `Formato: ${settings.format}\n` +
+            `Tracking: ${settings.tracking ? 'Ativado' : 'Desativado'}\n` +
+            `Legendas: ${settings.subtitles ? 'Ativado' : 'Desativado'}\n` +
+            `Cor da legenda: ${settings.subtitleColor}`;
 
         if (!confirm(msg)) return;
 
@@ -243,17 +314,29 @@ class NewProjectManager {
         }
 
         try {
-            const result = await this._processVideo(this.state.currentUrl);
-            alert(`✅ Processamento iniciado!\nTask ID: ${result.task_id}`);
-            window.location.href = `processing.html?task_id=${result.task_id}`;
+            // ── Passo 1: Criar job no banco ──
+            const job = await this._createJob();
+            this.state.jobId = job.id;
+            console.log(`📋 Job criado: ${this.state.jobId}`);
+
+            // ── Passo 2: Processar vídeo ──
+            const result = await this._processVideo(this.state.currentUrl, this.state.jobId);
+            this.state.taskId = result.task_id;
+            
+            console.log(`✅ Processamento iniciado! Task ID: ${result.task_id}`);
+
+            // ── Passo 3: Redirecionar para página de status ──
+            window.location.href = `processing.html?task_id=${result.task_id}&job_id=${this.state.jobId}`;
+
         } catch (err) {
-            alert(`❌ Erro: ${err.message || 'Erro desconhecido'}`);
-        } finally {
-            this.state.isProcessing = false;
+            console.error('❌ Erro:', err);
+            alert(`❌ Erro ao processar vídeo:\n\n${err.message || 'Erro desconhecido'}`);
+            
             if (this.processBtn) {
                 this.processBtn.innerHTML = `<span class="material-icons">play_arrow</span> Processar Vídeo`;
                 this.processBtn.disabled = false;
             }
+            this.state.isProcessing = false;
         }
     }
 
@@ -295,18 +378,46 @@ class NewProjectManager {
         };
     }
 
-    async _processVideo(url) {
+    async _createJob() {
+        const payload = {
+            user_id: this.state.userId,
+            source_type: this.state.settings.sourceType,
+            source_url: this.state.currentUrl,
+            num_clips: this.state.settings.numClips,
+            clip_duration: this.state.settings.clipDuration,
+            tracking: this.state.settings.tracking
+        };
+
+        console.log('📤 Criando job:', payload);
+
+        const res = await fetch(this.api.jobs, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || `Erro ao criar job: ${res.status}`);
+        }
+
+        return res.json();
+    }
+
+    async _processVideo(url, jobId) {
         const payload = {
             url: url,
-            user_id: null,
-            job_id: null,
+            user_id: this.state.userId,
+            job_id: jobId,
             num_clips: this.state.settings.numClips,
             clip_duration: this.state.settings.clipDuration,
             tracking: this.state.settings.tracking,
             subtitles: this.state.settings.subtitles,
-            source_type: 'youtube',
+            source_type: this.state.settings.sourceType,
             cor_legenda: this.state.settings.subtitleColor
         };
+
+        console.log('📤 Processando vídeo:', payload);
 
         const res = await fetch(this.api.process, {
             method: 'POST',
@@ -316,10 +427,64 @@ class NewProjectManager {
 
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
-            throw new Error(err.detail || `Erro ${res.status}`);
+            throw new Error(err.detail || `Erro ao processar: ${res.status}`);
         }
 
         return res.json();
+    }
+
+    async _getStatus(taskId) {
+        const res = await fetch(this.api.status(taskId));
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || `Erro ao buscar status: ${res.status}`);
+        }
+
+        return res.json();
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    //  SSE - STATUS STREAM
+    // ──────────────────────────────────────────────────────────────
+
+    _connectStatusStream(taskId, onUpdate, onComplete) {
+        const eventSource = new EventSource(this.api.statusStream(taskId));
+
+        eventSource.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                console.log('📡 Status update:', data);
+                
+                if (onUpdate) onUpdate(data);
+                
+                if (data.status === 'done' || data.status === 'error') {
+                    eventSource.close();
+                    if (onComplete) onComplete(data);
+                }
+            } catch (e) {
+                console.error('Erro ao parsear SSE:', e);
+            }
+        };
+
+        eventSource.onerror = (error) => {
+            console.error('❌ Erro no SSE:', error);
+            eventSource.close();
+            if (onComplete) onComplete({ status: 'error', error: 'Conexão perdida' });
+        };
+
+        return eventSource;
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    //  VALIDAÇÃO
+    // ──────────────────────────────────────────────────────────────
+
+    _isYouTubeUrl(url) {
+        return /(?:youtube\.com\/watch\?v=)([\w-]+)/.test(url) ||
+               /(?:youtu\.be\/)([\w-]+)/.test(url) ||
+               /(?:youtube\.com\/shorts\/)([\w-]+)/.test(url) ||
+               /(?:youtube\.com\/embed\/)([\w-]+)/.test(url);
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -486,13 +651,6 @@ class NewProjectManager {
     //  UTILS
     // ──────────────────────────────────────────────────────────────
 
-    _isYouTubeUrl(url) {
-        return /(?:youtube\.com\/watch\?v=)([\w-]+)/.test(url) ||
-               /(?:youtu\.be\/)([\w-]+)/.test(url) ||
-               /(?:youtube\.com\/shorts\/)([\w-]+)/.test(url) ||
-               /(?:youtube\.com\/embed\/)([\w-]+)/.test(url);
-    }
-
     _formatDuration(seconds) {
         if (!seconds || seconds <= 0) return '00:00';
         const m = Math.floor(seconds / 60);
@@ -535,6 +693,30 @@ class NewProjectManager {
         ta.select();
         try { document.execCommand('copy'); } catch (e) { console.warn('Erro ao copiar:', e); }
         document.body.removeChild(ta);
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    //  MÉTODOS PÚBLICOS
+    // ──────────────────────────────────────────────────────────────
+
+    getTaskId() {
+        return this.state.taskId;
+    }
+
+    getJobId() {
+        return this.state.jobId;
+    }
+
+    getStatus(taskId) {
+        return this._getStatus(taskId);
+    }
+
+    connectStatusStream(taskId, onUpdate, onComplete) {
+        return this._connectStatusStream(taskId, onUpdate, onComplete);
+    }
+
+    getSettings() {
+        return { ...this.state.settings };
     }
 }
 

@@ -250,7 +250,7 @@ Exemplos de uso:
     parser.add_argument(
         "--duration",
         type=int,
-        default=60,
+        default=90,
         help="Duração de cada clipe em segundos (padrão: 60)",
     )
 

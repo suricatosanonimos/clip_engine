@@ -471,7 +471,7 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser(description="Corta vídeos em clipes")
     parser.add_argument("--video", required=True, help="Caminho do vídeo")
-    parser.add_argument("--duration", type=int, default=60, help="Duração de cada clipe (segundos)")
+    parser.add_argument("--duration", type=int, default=90, help="Duração de cada clipe (segundos)")
     parser.add_argument("--format", default="9:16", choices=["9:16", "16:9"], help="Formato de saída")
     parser.add_argument("--output", help="Diretório de saída")
     
@@ -495,7 +495,7 @@ if __name__ == "__main__":
     print("🎬 FASE 1: Corte Rápido do Vídeo")
     print("=" * 60)
     
-    output_dir = Path(args.output) if args.output else Path("/home/dev/Code/clip_engine/parts")
+    output_dir = Path(args.output) if args.output else Path("/home/dev/Code/clip_engine/api/processed_videos/raw_clips")
     
     splitter = VideoSplitterFast(
         base_dir=output_dir,

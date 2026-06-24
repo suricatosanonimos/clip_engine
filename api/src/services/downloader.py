@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class VideoDownloader:
-    def __init__(self, output_dir: str = "clip_engine") -> None:
+    def __init__(self, output_dir: str = "/home/dev/Code/clip_engine/api/downloads") -> None:
         self.output_dir = output_dir
         self.base_path = Path(self.output_dir)
         self.base_path.mkdir(parents=True, exist_ok=True)
@@ -232,4 +232,4 @@ class VideoDownloader:
 
 if __name__ == "__main__":
     start = VideoDownloader()
-    start.download_and_split("https://youtu.be/s0Zug_8jEmY?si=xTuMzhfnvMGtWA2F")
+    start.download_and_split("https://youtu.be/MqdbI2rRSw8?is=DBgZSt_EkPcLaFhd")

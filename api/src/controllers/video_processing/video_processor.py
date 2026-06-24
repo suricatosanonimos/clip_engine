@@ -125,6 +125,10 @@ class VideoProcessor:
         self._watermark_pos_x = 0
         self._watermark_pos_y = 0
         self._watermark_pos_name = ""
+        
+        # ── Cache da logo ──
+        self._logo_img = None
+        self._logo_loaded = False
 
     # ──────────────────────────────────────────────────────────────
     #  SAFETY NET — compatibilidade com OpenCV
@@ -283,14 +287,147 @@ class VideoProcessor:
         ]
 
     # ──────────────────────────────────────────────────────────────
-    #  MARCA D'ÁGUA MÓVEL (ESTILO TIKTOK)
+    #  MARCA D'ÁGUA COM LOGO (ESTILO TIKTOK)
+    #  ERRO: A LOGO NÂO ESTA APARECENDO NO VIDEO -Gilderlan | 23 jun 23:06
     # ──────────────────────────────────────────────────────────────
 
+    def _load_logo(self) -> Optional[np.ndarray]:
+        """
+        Carrega a logo do arquivo assets/logo.png.
+        Retorna a logo com canal alpha ou None se não encontrar.
+        """
+        if self._logo_loaded:
+            return self._logo_img
+        
+        logo_path = Path("/home/dev/Code/clip_engine/api/assets/logo.png")
+        
+        if logo_path.exists():
+            # Carrega a logo com canal alpha (transparência)
+            logo = cv2.imread(str(logo_path), cv2.IMREAD_UNCHANGED)
+            if logo is not None:
+                self._logo_img = logo
+                self._logo_loaded = True
+                print(f"{time_for_logs()} ✅ Logo carregada: {logo_path}")
+                return logo
+            else:
+                print(f"{time_for_logs()} ⚠️  Falha ao carregar logo: {logo_path}")
+        else:
+            print(f"{time_for_logs()} ⚠️  Logo não encontrada em: {logo_path}")
+        
+        self._logo_loaded = True
+        self._logo_img = None
+        return None
+
     def _add_watermark(
-        self, frame: np.ndarray, alpha: float = 0.3, change_interval: float = 3.0
+        self, frame: np.ndarray, alpha: float = 0.25, change_interval: float = 3.0
     ) -> np.ndarray:
         """
         Adiciona marca d'água estilo TikTok que se move pela tela.
+        Usa a logo PNG se disponível, senão usa texto como fallback.
+        """
+        if frame is None:
+            return frame
+
+        h, w = frame.shape[:2]
+        
+        # ── Carrega a logo (primeira vez) ──
+        logo = self._load_logo()
+        
+        # ── Se tem logo, usa ela ──
+        if logo is not None:
+            return self._add_logo_watermark(frame, logo, alpha, change_interval)
+        else:
+            # ── Fallback: texto ──
+            return self._add_text_watermark(frame, alpha, change_interval)
+
+    def _add_logo_watermark(
+        self, 
+        frame: np.ndarray, 
+        logo: np.ndarray, 
+        alpha: float = 0.25, 
+        change_interval: float = 3.0
+    ) -> np.ndarray:
+        """
+        Adiciona a logo como marca d'água móvel.
+        """
+        h, w = frame.shape[:2]
+        
+        # ── Redimensiona a logo proporcionalmente ──
+        logo_h, logo_w = logo.shape[:2]
+        
+        # Tamanho da logo: ~8% da altura do vídeo
+        target_height = int(h * 0.08)
+        target_width = int(logo_w * (target_height / logo_h))
+        
+        # Limita largura máxima (20% do vídeo)
+        max_width = int(w * 0.2)
+        if target_width > max_width:
+            target_width = max_width
+            target_height = int(logo_h * (target_width / logo_w))
+        
+        # Redimensiona mantendo proporção
+        if logo_w != target_width or logo_h != target_height:
+            logo_resized = cv2.resize(logo, (target_width, target_height), interpolation=cv2.INTER_AREA)
+        else:
+            logo_resized = logo
+        
+        logo_h, logo_w = logo_resized.shape[:2]
+        
+        # ── Verifica se a logo tem canal alpha ──
+        if logo_resized.shape[2] == 4:
+            # Separa os canais BGR e Alpha
+            bgr = logo_resized[:, :, :3]
+            alpha_channel = logo_resized[:, :, 3] / 255.0
+        else:
+            bgr = logo_resized
+            alpha_channel = np.ones((logo_h, logo_w), dtype=np.float32)
+        
+        # ── Posição da logo (móvel) ──
+        frames_to_change = int(self.fps * change_interval)
+        
+        if (self._watermark_frame_counter - self._watermark_last_change) >= frames_to_change:
+            # Posições: (x_percent, y_percent)
+            positions = [
+                (5, 90),   # canto_inferior_esquerdo
+                (75, 5),   # canto_superior_direito
+                (5, 5),    # canto_superior_esquerdo
+                (75, 90),  # canto_inferior_direito
+                (40, 80),  # meio_inferior
+                (40, 10),  # meio_superior
+            ]
+            
+            x_percent, y_percent = random.choice(positions)
+            self._watermark_pos_x = int((w - logo_w) * (x_percent / 100))
+            self._watermark_pos_y = int((h - logo_h) * (y_percent / 100))
+            
+            # Garante que não fique fora da tela
+            self._watermark_pos_x = max(10, min(self._watermark_pos_x, w - logo_w - 10))
+            self._watermark_pos_y = max(10, min(self._watermark_pos_y, h - logo_h - 10))
+            
+            self._watermark_last_change = self._watermark_frame_counter
+        
+        # ── Aplica a logo no frame ──
+        x, y = self._watermark_pos_x, self._watermark_pos_y
+        
+        # Extrai a região onde a logo será colocada
+        roi = frame[y:y+logo_h, x:x+logo_w]
+        
+        # Aplica a logo com transparência
+        for c in range(3):  # Para cada canal BGR
+            roi[:, :, c] = (roi[:, :, c] * (1 - alpha_channel * alpha) + 
+                           bgr[:, :, c] * (alpha_channel * alpha))
+        
+        frame[y:y+logo_h, x:x+logo_w] = roi
+        
+        self._watermark_frame_counter += 1
+        
+        return frame
+
+    def _add_text_watermark(
+        self, frame: np.ndarray, alpha: float = 0.25, change_interval: float = 3.0
+    ) -> np.ndarray:
+        """
+        Fallback: adiciona texto como marca d'água (caso a logo não seja encontrada).
         """
         if frame is None:
             return frame
@@ -306,25 +443,22 @@ class VideoProcessor:
 
         frames_to_change = int(self.fps * change_interval)
 
-        if (
-            self._watermark_frame_counter - self._watermark_last_change
-        ) >= frames_to_change:
+        if (self._watermark_frame_counter - self._watermark_last_change) >= frames_to_change:
             positions = [
-                (5, 90, "canto_inferior_esquerdo"),
-                (75, 5, "canto_superior_direito"),
-                (5, 5, "canto_superior_esquerdo"),
-                (75, 90, "canto_inferior_direito"),
-                (40, 80, "meio_inferior"),
-                (40, 10, "meio_superior"),
+                (5, 90),
+                (75, 5),
+                (5, 5),
+                (75, 90),
+                (40, 80),
+                (40, 10),
             ]
 
-            x_percent, y_percent, pos_name = random.choice(positions)
+            x_percent, y_percent = random.choice(positions)
             self._watermark_pos_x = int((w - text_w) * (x_percent / 100))
             self._watermark_pos_y = int((h - text_h) * (y_percent / 100))
             self._watermark_pos_x = max(10, min(self._watermark_pos_x, w - text_w - 10))
             self._watermark_pos_y = max(10, min(self._watermark_pos_y, h - text_h - 10))
             self._watermark_last_change = self._watermark_frame_counter
-            self._watermark_pos_name = pos_name
 
         overlay = frame.copy()
 
@@ -415,7 +549,6 @@ class VideoProcessor:
     ) -> Optional[Path]:
         """
         Cria clipe com tracking e SEM ÁUDIO.
-        O áudio será adicionado posteriormente pelo TranscriberVideo.
         """
         duration = end - start
         output = self.raw_dir / f"{video_path.stem}_clip_{index:02d}.mp4"
@@ -451,8 +584,40 @@ class VideoProcessor:
             transition_seconds=1.0,
         )
 
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        # ── Escolhe codec compatível ──
+        # Tenta usar diferentes codecs (do mais eficiente para o mais compatível)
+        codecs = [
+            ("avc1", "H264"),
+            ("mp4v", "MPEG-4"),
+            ("X264", "X264"),
+            ("H264", "H264"),
+        ]
+        
+        fourcc = None
+        for codec_str, codec_name in codecs:
+            try:
+                fourcc = cv2.VideoWriter_fourcc(*codec_str)
+                test_writer = cv2.VideoWriter("/dev/null", fourcc, 30, (100, 100))
+                if test_writer.isOpened():
+                    test_writer.release()
+                    print(f"{time_for_logs()} ✅ Usando codec: {codec_name} ({codec_str})")
+                    break
+                test_writer.release()
+            except:
+                continue
+        else:
+            # Fallback final
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            print(f"{time_for_logs()} ⚠️  Usando codec mp4v (fallback final)")
+
         out = cv2.VideoWriter(str(output), fourcc, fps, (out_width, out_height))
+        
+        # Verifica se o VideoWriter foi inicializado corretamente
+        if not out.isOpened():
+            print(f"{time_for_logs()} ❌ Falha ao inicializar VideoWriter com codec {fourcc}")
+            print(f"{time_for_logs()} ⚠️  Usando fallback FFmpeg...")
+            cap.release()
+            return self._create_clip_ffmpeg(video_path, start, end, index)
 
         total_frames = int(duration * fps)
         frames_processed = 0
@@ -476,8 +641,8 @@ class VideoProcessor:
 
             crop_x = tracker.update(detections, mesh_results, frames_processed)
             cropped = frame[0:frame_height, crop_x : crop_x + crop_width]
-            resized = cv2.resize(cropped, (out_width, out_height))
-            resized = self._add_watermark(resized)
+            resized = cv2.resize(cropped, (out_width, out_height), interpolation=cv2.INTER_LANCZOS4)
+            resized = self._add_watermark(resized, alpha=0.25)
             out.write(resized)
             frames_processed += 1
 
@@ -504,18 +669,17 @@ class VideoProcessor:
         )
 
         # ── RETORNA O CLIPE SEM ÁUDIO ──
-        # O áudio será adicionado pelo TranscriberVideo durante o processamento de legendas
-        if frames_processed > 0 and output.exists():
+        if frames_processed > 0 and output.exists() and output.stat().st_size > 0:
             return output
-        return None
+        else:
+            print(f"{time_for_logs()} ⚠️  Clipe vazio ou não gerado, tentando fallback FFmpeg...")
+            return self._create_clip_ffmpeg(video_path, start, end, index)
 
     # ─── MÉTODO REMOVIDO: _add_audio_to_video ─────────────────────
-    # O áudio agora é gerenciado pelo TranscriberVideo para evitar
-    # processamento duplicado e garantir a extração correta.
 
     def _create_clip_ffmpeg(
-    self, video_path: Path, start: float, end: float, index: int
-) -> Optional[Path]:
+        self, video_path: Path, start: float, end: float, index: int
+    ) -> Optional[Path]:
         """Fallback sem tracking — corte direto com FFmpeg."""
         duration = end - start
         output = self.raw_dir / f"{video_path.stem}_clip_{index:02d}.mp4"
@@ -525,20 +689,16 @@ class VideoProcessor:
         height = info["height"]
         
         # ── Verifica se o vídeo já está no formato correto ──
-        # Se o vídeo já é vertical (9:16) e tem resolução próxima, mantém
         aspect_ratio = width / height
         
-        # Se já está próximo de 9:16 (vertical), não faz crop
         if aspect_ratio < 0.7:  # Vídeo vertical
             crop_filter = f"scale=720:1280"
         else:
-            # Vídeo horizontal: faz crop central para 9:16
-            crop_width = int(height * 0.75)  # Altura * 9/16 ≈ 0.5625, mas usamos 0.75 para dar margem
+            crop_width = int(height * 0.75)
             crop_x = (width - crop_width) // 2
             if crop_x >= 0 and crop_width <= width:
                 crop_filter = f"crop={crop_width}:{height}:{crop_x}:0,scale=720:1280"
             else:
-                # Fallback: apenas escala mantendo proporção
                 crop_filter = f"scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2"
 
         cmd = [
@@ -554,12 +714,12 @@ class VideoProcessor:
             "-c:v",
             "libx264",
             "-preset",
-            "veryfast",
+            "medium",  # Melhor qualidade que veryfast
             "-crf",
-            "23",
+            "18",      # Qualidade mais alta (18 é próximo do lossless)
             "-pix_fmt",
             "yuv420p",
-            "-an",  # Remove áudio
+            "-an",     # Remove áudio
             "-y",
             str(output),
         ]

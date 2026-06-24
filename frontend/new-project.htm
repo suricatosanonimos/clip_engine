@@ -59,17 +59,17 @@
 
         <div class="new-project-container">
             <!-- INPUT SOURCE -->
-            <section class="project-section">
+            <section class="project-section" id="source-section">
                 <h2>
                     <span class="material-icons section-icon">video_library</span>
                     Fonte do Vídeo
                 </h2>
-                <div class="source-tabs">
-                    <button class="source-tab active">
+                <div class="source-tabs" id="source-tabs">
+                    <button class="source-tab active" data-source="youtube">
                         <span class="material-icons">link</span>
                         URL do YouTube
                     </button>
-                    <button class="source-tab">
+                    <button class="source-tab" data-source="upload">
                         <span class="material-icons">upload_file</span>
                         Upload de Arquivo
                     </button>
@@ -86,7 +86,7 @@
                         Buscar Informações
                     </button>
                 </div>
-                <div class="video-preview-placeholder">
+                <div class="video-preview-placeholder" id="video-preview">
                     <span class="material-icons preview-icon">play_circle_outline</span>
                     <span>Nenhum vídeo carregado</span>
                     <small>Cole a URL para ver as informações</small>
@@ -94,35 +94,35 @@
             </section>
 
             <!-- SETTINGS -->
-            <section class="project-section">
+            <section class="project-section" id="settings-section">
                 <h2>
                     <span class="material-icons section-icon">settings</span>
                     Configurações
                 </h2>
                 <div class="settings-grid">
                     <div class="setting-group">
-                        <label>Quantidade de Clipes</label>
+                        <label for="num-clips-range">Quantidade de Clipes</label>
                         <div class="range-control">
-                            <input type="range" min="1" max="10" value="3" class="range-input" />
-                            <span class="range-value">3</span>
+                            <input type="range" id="num-clips-range" min="1" max="10" value="3" class="range-input" />
+                            <span class="range-value" id="num-clips-value">3</span>
                         </div>
                     </div>
                     <div class="setting-group">
                         <label>Duração do Clipe</label>
-                        <div class="btn-group">
-                            <button class="btn-option active">30s</button>
-                            <button class="btn-option">60s</button>
-                            <button class="btn-option">90s</button>
+                        <div class="btn-group" id="duration-group">
+                            <button class="btn-option" data-duration="30">30s</button>
+                            <button class="btn-option active" data-duration="60">60s</button>
+                            <button class="btn-option" data-duration="90">90s</button>
                         </div>
                     </div>
                     <div class="setting-group">
                         <label>Formato</label>
-                        <div class="btn-group">
-                            <button class="btn-option active">
+                        <div class="btn-group" id="format-group">
+                            <button class="btn-option active" data-format="9:16">
                                 <span class="material-icons">phone_android</span>
                                 9:16 (Shorts)
                             </button>
-                            <button class="btn-option">
+                            <button class="btn-option" data-format="16:9">
                                 <span class="material-icons">desktop_windows</span>
                                 16:9 (Landscape)
                             </button>
@@ -130,12 +130,12 @@
                     </div>
                     <div class="setting-group">
                         <label>Face Tracking</label>
-                        <div class="toggle-group">
-                            <button class="btn-option active">
+                        <div class="toggle-group" id="tracking-group">
+                            <button class="btn-option active" data-tracking="true">
                                 <span class="material-icons">check_circle</span>
                                 Ativado
                             </button>
-                            <button class="btn-option">
+                            <button class="btn-option" data-tracking="false">
                                 <span class="material-icons">cancel</span>
                                 Desativado
                             </button>
@@ -143,12 +143,12 @@
                     </div>
                     <div class="setting-group">
                         <label>Legendas</label>
-                        <div class="toggle-group">
-                            <button class="btn-option active">
+                        <div class="toggle-group" id="subtitles-group">
+                            <button class="btn-option active" data-subtitles="true">
                                 <span class="material-icons">check_circle</span>
                                 Ativado
                             </button>
-                            <button class="btn-option">
+                            <button class="btn-option" data-subtitles="false">
                                 <span class="material-icons">cancel</span>
                                 Desativado
                             </button>
@@ -156,36 +156,36 @@
                     </div>
                     <div class="setting-group">
                         <label>Cor da Legenda</label>
-                        <div class="color-picker">
-                            <button class="color-option active" style="background: #FFFFFF; border: 2px solid #1A1A2E;" title="Branco"></button>
-                            <button class="color-option" style="background: #FFD93D;" title="Amarelo"></button>
-                            <button class="color-option" style="background: #6C63FF;" title="Roxo"></button>
-                            <button class="color-option" style="background: #6BCB77;" title="Verde"></button>
+                        <div class="color-picker" id="color-picker">
+                            <button class="color-option active" data-color="white" style="background: #FFFFFF; border: 2px solid #1A1A2E;" title="Branco"></button>
+                            <button class="color-option" data-color="yellow" style="background: #FFD93D;" title="Amarelo"></button>
+                            <button class="color-option" data-color="blue" style="background: #6C63FF;" title="Roxo"></button>
+                            <button class="color-option" data-color="green" style="background: #6BCB77;" title="Verde"></button>
                         </div>
                     </div>
                 </div>
             </section>
 
             <!-- AI ANALYSIS -->
-            <section class="project-section">
+            <section class="project-section" id="ai-section">
                 <h2>
                     <span class="material-icons section-icon">psychology</span>
                     Análise da IA
                 </h2>
                 <div class="ai-analysis">
-                    <div class="ai-suggestion">
+                    <div class="ai-suggestion" id="moments-suggestion">
                         <span class="ai-badge">
                             <span class="material-icons">lightbulb</span>
                             Melhores momentos
                         </span>
-                        <p>"A IA identificou 3 momentos de alto engajamento neste vídeo..."</p>
+                        <p id="moments-text">"A IA identificou 3 momentos de alto engajamento neste vídeo..."</p>
                     </div>
-                    <div class="ai-suggestion">
+                    <div class="ai-suggestion" id="titles-suggestion">
                         <span class="ai-badge">
                             <span class="material-icons">title</span>
                             Títulos sugeridos
                         </span>
-                        <ul>
+                        <ul id="titles-list">
                             <li>• O segredo que ninguém te conta</li>
                             <li>• Como mudei minha vida em 30 dias</li>
                             <li>• A verdade sobre o dinheiro</li>
@@ -196,7 +196,7 @@
 
             <!-- SUBMIT -->
             <div class="submit-section">
-                <button class="btn btn-primary btn-large">
+                <button id="process-video-btn" class="btn btn-primary btn-large">
                     <span class="material-icons">play_arrow</span>
                     Processar Vídeo
                 </button>
@@ -205,8 +205,6 @@
         </div>
     </main>
 
-
     <script src="scripts/new_project.js"></script>
-
 </body>
 </html>
