@@ -380,3 +380,7 @@ $RECYCLE.BIN/
 
 # End of https://www.toptal.com/developers/gitignore/api/python,cvs,dotenv,linux,windows,pythonvanilla,flask,video,audio
 
+*.weights
+*.pt
+*.onnx
+yolov4.cfg
