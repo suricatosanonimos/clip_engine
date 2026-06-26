@@ -4,8 +4,9 @@ src/controllers/whisper/__init__.py
 Carregamento do modelo Whisper para transcrição de áudio.
 """
 
-from typing import Optional
 from pathlib import Path
+from typing import Optional
+
 from faster_whisper import WhisperModel
 from src.utils.logs import logger
 
@@ -20,13 +21,13 @@ _MODEL = None
 def load_model(model_size: str = "base") -> WhisperModel:
     """Carrega (ou retorna em cache) o modelo Whisper"""
     global _MODEL
-    
+
     if _MODEL is not None:
         logger.debug(f"Reutilizando modelo já carregado: {model_size}")
         return _MODEL
-    
+
     logger.info(f"Carregando modelo Whisper: {model_size} (primeira vez pode demorar)")
-    
+
     try:
         _MODEL = WhisperModel(
             model_size,

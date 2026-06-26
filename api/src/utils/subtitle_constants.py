@@ -102,5 +102,3 @@ EMOJI_WORDS = {
     "força": "💪",
     "foco": "🎯",
 }
-
-

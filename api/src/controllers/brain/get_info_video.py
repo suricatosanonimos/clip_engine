@@ -6,9 +6,10 @@ Busca informações e gera títulos de vídeos do YouTube usando Brain IA.
 
 import asyncio
 import re
-from typing import Any, Dict, List, Optional
 import sys
 from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 import yt_dlp
 
 # ── Configuração de Path ──────────────────────────────────────
@@ -24,7 +25,7 @@ class BrainVideoInfo:
     Classe especializada para buscar informações de vídeos do YouTube
     e gerar títulos usando a Brain IA.
     """
-    
+
     def __init__(self, url: Optional[str] = None) -> None:
         self.url = url
         self._brain = None
@@ -43,6 +44,7 @@ class BrainVideoInfo:
     async def get_info(self) -> Dict[str, Any]:
         """Retorna metadados do vídeo sem fazer download."""
         try:
+
             def _sync(url: str) -> Dict[str, Any]:
                 ydl_opts = {
                     "quiet": True,
@@ -95,9 +97,9 @@ class BrainVideoInfo:
 
             video_title = info.get("title", "Vídeo sem título")
             description = info.get("description", "")
-            
+
             logger.info(f"Gerando {num_titles} títulos para: {video_title}")
-            
+
             # Tenta gerar títulos com IA
             result = self.brain.generate_titles(
                 video_title=video_title,
@@ -106,14 +108,14 @@ class BrainVideoInfo:
                 duration=info.get("duration", 0),
                 uploader=info.get("uploader", ""),
             )
-            
+
             titles = result.get("titles", [])
-            
+
             # Se não conseguiu gerar, usa fallback
             if not titles:
                 logger.info("Usando fallback de títulos")
                 titles = self._fallback_titulos(video_title, num_titles)
-            
+
             return {
                 "success": True,
                 "video_title": video_title,
@@ -146,17 +148,17 @@ class BrainVideoInfo:
             f"Como {video_title} está mudando tudo",
             f"{video_title} - Resumo completo",
         ]
-        
+
         titulos = []
         seen = set()
-        
+
         for template in templates:
             if template.lower() not in seen:
                 seen.add(template.lower())
                 titulos.append(template)
             if len(titulos) >= count:
                 break
-        
+
         return titulos
 
 
@@ -164,11 +166,13 @@ class BrainVideoInfo:
 #  CLASSE PRINCIPAL (compatibilidade)
 # ──────────────────────────────────────────────────────────────────
 
+
 class GetInfoVideo(BrainVideoInfo):
     """Classe para compatibilidade com o código existente."""
+
     pass
 
 
-if __name__ == '__main__':
-    test = BrainVideoInfo(url='https://youtu.be/zOK8jUXIWRQ?is=KxpzECvmh6xOLLq-')
+if __name__ == "__main__":
+    test = BrainVideoInfo(url="https://youtu.be/zOK8jUXIWRQ?is=KxpzECvmh6xOLLq-")
     print(asyncio.run(test.create_titles(num_titles=3)))

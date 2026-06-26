@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 class SubtitleGenerator:
     """
     Classe responsável por gerar legendas word-by-word em vídeos.
-    
+
     Fluxo:
         1. Extrai informações do vídeo (duração, resolução)
         2. Transcreve o áudio com Whisper (palavra por palavra)
@@ -75,9 +75,7 @@ class SubtitleGenerator:
 
         # Cor de destaque para palavras longas (amarelo ou branco)
         self.cor_destaque = (
-            COLORS["yellow"]
-            if cor_normalizada != "yellow"
-            else COLORS["white"]
+            COLORS["yellow"] if cor_normalizada != "yellow" else COLORS["white"]
         )
 
         # ── Diretórios de saída ──
@@ -90,13 +88,15 @@ class SubtitleGenerator:
         os.makedirs(self.cache_dir, exist_ok=True)
 
         # ── Modo offline (evita downloads desnecessários) ──
-        #os.environ["HF_HUB_OFFLINE"] = "1"
-        #os.environ["TRANSFORMERS_OFFLINE"] = "1"
+        # os.environ["HF_HUB_OFFLINE"] = "1"
+        # os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
         # ── Compila padrões regex para censura e emojis ──
         self._compile_patterns()
 
-        logger.info(f"SubtitleGenerator inicializado: cor={self.cor_legenda}, fast_mode={fast_mode}")
+        logger.info(
+            f"SubtitleGenerator inicializado: cor={self.cor_legenda}, fast_mode={fast_mode}"
+        )
 
     # ──────────────────────────────────────────────────────────────
     #  PADRÕES REGEX (Censura e Emojis)
@@ -204,8 +204,8 @@ class SubtitleGenerator:
             Cabeçalho ASS completo
         """
         # ── Tamanhos dinâmicos baseados na resolução ──
-        font_size = int(height * 0.08)          # 8% da altura
-        margin_vertical = int(height * 0.25)    # 25% da altura (posição)
+        font_size = int(height * 0.08)  # 8% da altura
+        margin_vertical = int(height * 0.25)  # 25% da altura (posição)
         outline_size = max(2, int(font_size * 0.1))  # Borda proporcional
 
         return f"""[Script Info]
@@ -235,10 +235,14 @@ Style: Default,Impact,{font_size},{self.cor_primary},&H000000FF,{COLORS['black']
         """
         cmd = [
             self.ffprobe_path,
-            "-v", "error",
-            "-select_streams", "v:0",
-            "-show_entries", "stream=width,height",
-            "-of", "json",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height",
+            "-of",
+            "json",
             str(path),
         ]
         proc = await asyncio.create_subprocess_exec(
@@ -262,9 +266,12 @@ Style: Default,Impact,{font_size},{self.cor_primary},&H000000FF,{COLORS['black']
         """
         cmd = [
             self.ffprobe_path,
-            "-v", "error",
-            "-show_entries", "format=duration",
-            "-of", "json",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "json",
             str(path),
         ]
         proc = await asyncio.create_subprocess_exec(
@@ -301,13 +308,13 @@ Style: Default,Impact,{font_size},{self.cor_primary},&H000000FF,{COLORS['black']
             None,
             lambda: whisper_instance.transcribe(
                 str(path),
-                beam_size=5,                      # Melhor qualidade
-                word_timestamps=True,             # Timestamps por palavra
-                best_of=5,                        # Melhor resultado
-                language="pt",                    # Português
+                beam_size=5,  # Melhor qualidade
+                word_timestamps=True,  # Timestamps por palavra
+                best_of=5,  # Melhor resultado
+                language="pt",  # Português
                 initial_prompt="Áudio em português do Brasil",
-                temperature=0.0,                  # Determinístico
-                condition_on_previous_text=False, # Evita repetições
+                temperature=0.0,  # Determinístico
+                condition_on_previous_text=False,  # Evita repetições
             ),
         )
 
@@ -316,31 +323,37 @@ Style: Default,Impact,{font_size},{self.cor_primary},&H000000FF,{COLORS['black']
 
         for segment in segments:
             # Verifica se o segmento tem palavras individuais
-            if hasattr(segment, 'words') and segment.words:
+            if hasattr(segment, "words") and segment.words:
                 for word in segment.words:
                     # Verifica se word tem os atributos necessários
-                    if hasattr(word, 'start') and hasattr(word, 'end') and hasattr(word, 'word'):
+                    if (
+                        hasattr(word, "start")
+                        and hasattr(word, "end")
+                        and hasattr(word, "word")
+                    ):
                         text = self._process_text(word.word.strip()).upper()
 
                         # ── Aplica destaque para palavras longas ou com pontuação ──
                         if len(text) > 6 or any(x in text for x in ["!", "?", "$"]):
                             text = f"{{\\c{self.cor_destaque}}}{text}{{\\c}}"
 
-                        word_list.append({
-                            "start": word.start,
-                            "end": word.end,
-                            "text": text
-                        })
+                        word_list.append(
+                            {"start": word.start, "end": word.end, "text": text}
+                        )
             else:
                 # ── Fallback: usa o texto completo do segmento ──
-                logger.warning(f"Segmento sem palavras individuais, usando texto completo")
-                if hasattr(segment, 'start') and hasattr(segment, 'end') and hasattr(segment, 'text'):
+                logger.warning(
+                    f"Segmento sem palavras individuais, usando texto completo"
+                )
+                if (
+                    hasattr(segment, "start")
+                    and hasattr(segment, "end")
+                    and hasattr(segment, "text")
+                ):
                     text = self._process_text(segment.text.strip()).upper()
-                    word_list.append({
-                        "start": segment.start,
-                        "end": segment.end,
-                        "text": text
-                    })
+                    word_list.append(
+                        {"start": segment.start, "end": segment.end, "text": text}
+                    )
 
         logger.info(f"✅ Transcrição concluída: {len(word_list)} palavras/segmentos")
         return word_list
@@ -360,20 +373,19 @@ Style: Default,Impact,{font_size},{self.cor_primary},&H000000FF,{COLORS['black']
             # ── MODO RÁPIDO ──
             # Prioriza velocidade mantendo boa qualidade
             return [
-                "-c:v", "libx264",
-                "-preset", "veryfast",
-                "-crf", "23",
-                "-c:a", "copy"
+                "-c:v",
+                "libx264",
+                "-preset",
+                "veryfast",
+                "-crf",
+                "23",
+                "-c:a",
+                "copy",
             ]
         else:
             # ── MODO QUALIDADE ──
             # Prioriza qualidade máxima (mais lento)
-            return [
-                "-c:v", "libx264",
-                "-preset", "slow",
-                "-crf", "18",
-                "-c:a", "copy"
-            ]
+            return ["-c:v", "libx264", "-preset", "slow", "-crf", "18", "-c:a", "copy"]
 
     # ──────────────────────────────────────────────────────────────
     #  PROCESSAMENTO PRINCIPAL
@@ -383,7 +395,7 @@ Style: Default,Impact,{font_size},{self.cor_primary},&H000000FF,{COLORS['black']
         self,
         input_path: str,
         audio_path: Optional[str] = None,  # ← NOVO: caminho do áudio separado
-        cor_legenda: Optional[str] = None
+        cor_legenda: Optional[str] = None,
     ) -> Optional[Path]:
         """
         Processa o vídeo: transcreve e renderiza legendas.
@@ -413,12 +425,14 @@ Style: Default,Impact,{font_size},{self.cor_primary},&H000000FF,{COLORS['black']
         # ── 2. DETERMINA O CAMINHO PARA TRANSCRIÇÃO ──
         # Se audio_path foi fornecido, usa ele. Senão, usa o próprio vídeo.
         transcricao_path = Path(audio_path) if audio_path else path
-        
+
         if not transcricao_path.exists():
             logger.error(f"Áudio para transcrição não encontrado: {transcricao_path}")
             # Tenta usar o vídeo como fallback
             transcricao_path = path
-            logger.warning(f"Usando vídeo como fallback para transcrição: {transcricao_path}")
+            logger.warning(
+                f"Usando vídeo como fallback para transcrição: {transcricao_path}"
+            )
 
         # ── 3. CONFIGURAÇÃO DE CORES ──
         if cor_legenda:
@@ -468,16 +482,20 @@ Style: Default,Impact,{font_size},{self.cor_primary},&H000000FF,{COLORS['black']
             output_path = self.final_clips_dir / f"legendado_{path.name}"
 
             # Escapa caracteres especiais no caminho do .ass
-            escaped_ass = str(ass_path.absolute()).replace(":", "\\:").replace("\\", "/")
+            escaped_ass = (
+                str(ass_path.absolute()).replace(":", "\\:").replace("\\", "/")
+            )
 
             # Monta o comando FFmpeg
             ffmpeg_cmd = [
                 self.ffmpeg_path,
-                "-y",                         # Sobrescreve arquivo existente
-                "-i", str(path),              # Vídeo de entrada
-                "-vf", f"ass='{escaped_ass}'", # Filtro de legendas
-                *self._get_ffmpeg_params(),   # Parâmetros de codec
-                str(output_path),             # Arquivo de saída
+                "-y",  # Sobrescreve arquivo existente
+                "-i",
+                str(path),  # Vídeo de entrada
+                "-vf",
+                f"ass='{escaped_ass}'",  # Filtro de legendas
+                *self._get_ffmpeg_params(),  # Parâmetros de codec
+                str(output_path),  # Arquivo de saída
             ]
 
             logger.info("🎬 Renderizando legenda...")
@@ -493,7 +511,9 @@ Style: Default,Impact,{font_size},{self.cor_primary},&H000000FF,{COLORS['black']
             # ── 8. VERIFICA RESULTADO ──
             if proc.returncode == 0:
                 size_mb = output_path.stat().st_size / (1024 * 1024)
-                logger.info(f"✅ Vídeo legendado: {output_path.name} ({size_mb:.1f} MB)")
+                logger.info(
+                    f"✅ Vídeo legendado: {output_path.name} ({size_mb:.1f} MB)"
+                )
 
                 # Remove arquivo .ass temporário
                 if ass_path.exists():
@@ -508,5 +528,6 @@ Style: Default,Impact,{font_size},{self.cor_primary},&H000000FF,{COLORS['black']
         except Exception as e:
             logger.error(f"❌ Erro ao processar {path.name}: {e}")
             import traceback
+
             traceback.print_exc()
             return None

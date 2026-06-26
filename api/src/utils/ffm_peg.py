@@ -1,114 +1,95 @@
 """
-Módulo principal para processamento de vídeo.
-Versão otimizada com suporte completo a legendas dinâmicas (word-by-word) com borda AZUL e estilo Shorts.
+src/utils/ffm_peg.py
+
+Processador de legendas para clipes já cortados.
+Lê clipes de raw_clips/, gera legendas word-by-word e salva em final_clips/.
+
+Uso:
+    python3 ffm_peg.py                          # Processa TODOS os clipes em raw_clips/
+    python3 ffm_peg.py --batch-size 5           # 5 clipes em paralelo
+    python3 ffm_peg.py --select 1,3,5           # Apenas clipes específicos
+    python3 ffm_peg.py --video original.mp4     # Especifica vídeo original para áudio
 """
 
-import argparse
 import asyncio
 import subprocess
 import sys
 from pathlib import Path
 from typing import List, Optional
 
-# Adiciona o diretório raiz ao path
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(ROOT_DIR))
 
 from src.config.settings import Colors
-from src.controllers.video_processing import VideoProcessor, TranscriberVideo
+from src.controllers.video_processing import TranscriberVideo
 from src.services.transcriber import SubtitleGenerator
-
-#
-from src.utils.subtitle_constants import *
-
-# Decorador para visualizar o tempo de execição das função
 from src.utils.execution_time import execution_time_of_a_function
-from src.utils.time_log import time_for_logs
+from src.utils.subtitle_constants import *
 
 
 @execution_time_of_a_function
 async def process_clip_with_retry(
-    subtitle_gen: SubtitleGenerator, 
-    clip: Path, 
+    subtitle_gen: SubtitleGenerator,
+    clip: Path,
     audio_path: Optional[Path] = None,
-    max_retries: int = 2
+    max_retries: int = 2,
 ) -> Optional[Path]:
-    """
-    Processa um clipe com tentativas de retry em caso de falha.
-    Após gerar as legendas, adiciona o áudio de volta ao clipe.
-    
-    Args:
-        subtitle_gen: Instância do gerador de legendas
-        clip: Caminho do clipe de vídeo (SEM ÁUDIO)
-        audio_path: Caminho do arquivo de áudio .wav (extraído do original)
-        max_retries: Número máximo de tentativas
-    
-    Returns:
-        Caminho do clipe finalizado, ou None em caso de falha
-    """
+    """Processa um clipe com retry em caso de falha."""
     for attempt in range(max_retries + 1):
         try:
             if attempt > 0:
                 print(f"  {Colors.warning(f'🔄 Tentativa {attempt}/{max_retries}...')}")
 
-            # ── Etapa 1: Gerar clipe com legendas ──
-            # Passa o áudio .wav para transcrição (não o clipe sem áudio)
             if audio_path and audio_path.exists():
-                print(f"  {Colors.info('🎙️ Usando áudio extraído para transcrição...')}")
                 final_clip = await subtitle_gen.process_video(
-                    str(clip), 
-                    audio_path=str(audio_path)  # ← PASSA O ÁUDIO .WAV!
+                    str(clip), audio_path=str(audio_path)
                 )
             else:
-                print(f"  {Colors.warning('⚠️ Áudio não disponível, tentando transcrição direta...')}")
                 final_clip = await subtitle_gen.process_video(str(clip))
 
             if not final_clip or not Path(final_clip).exists():
                 raise Exception("Falha ao gerar clipe com legendas")
 
             final_clip_path = Path(final_clip)
-            
-            # ── Etapa 2: Adicionar áudio ao clipe legendado ──
+
+            # Adicionar áudio de volta
             if audio_path and audio_path.exists():
-                print(f"  {Colors.info('🔊 Adicionando áudio ao clipe legendado...')}")
-                
-                # Cria caminho para o clipe final com áudio
-                final_com_audio = final_clip_path.parent / f"com_audio_{final_clip_path.name}"
-                
-                # Comando FFmpeg para adicionar áudio
+                final_com_audio = (
+                    final_clip_path.parent / f"audio_{final_clip_path.name}"
+                )
+
                 cmd = [
                     "ffmpeg",
-                    "-i", str(final_clip_path),      # Vídeo com legenda
-                    "-i", str(audio_path),            # Áudio original
-                    "-c:v", "copy",                   # Copia vídeo (sem re-encode)
-                    "-c:a", "aac",                    # Codec de áudio
-                    "-b:a", "192k",                   # Bitrate do áudio
-                    "-map", "0:v:0",                  # Pega vídeo do primeiro input
-                    "-map", "1:a:0",                  # Pega áudio do segundo input
-                    "-shortest",                      # Duração do menor
-                    "-y",                             # Sobrescreve
-                    str(final_com_audio)
+                    "-i",
+                    str(final_clip_path),
+                    "-i",
+                    str(audio_path),
+                    "-c:v",
+                    "copy",
+                    "-c:a",
+                    "aac",
+                    "-b:a",
+                    "192k",
+                    "-map",
+                    "0:v:0",
+                    "-map",
+                    "1:a:0",
+                    "-shortest",
+                    "-y",
+                    str(final_com_audio),
                 ]
-                
+
                 result = subprocess.run(cmd, capture_output=True, text=True)
-                
+
                 if result.returncode == 0 and final_com_audio.exists():
-                    # Remove o clipe sem áudio e renomeia o com áudio
                     final_clip_path.unlink()
                     final_com_audio.rename(final_clip_path)
-                    print(f"  {Colors.success('✅ Áudio adicionado com sucesso!')}")
                     return final_clip_path
-                else:
-                    print(f"  {Colors.warning('⚠️ Falha ao adicionar áudio, mantendo clipe sem áudio')}")
-                    if result.stderr:
-                        print(f"  {Colors.error(f'Erro: {result.stderr[:200]}')}")
-                    return final_clip_path
-            else:
-                print(f"  {Colors.warning('⚠️ Áudio não disponível, mantendo clipe sem áudio')}")
-                return final_clip_path
+
+            return final_clip_path
 
         except Exception as e:
-            print(f"  {Colors.error(f'❌ Erro na tentativa {attempt}: {e}')}")
+            print(f"  {Colors.error(f'❌ Erro: {e}')}")
 
         if attempt < max_retries:
             await asyncio.sleep(2)
@@ -123,23 +104,13 @@ async def process_subtitles_batch(
     video_original_path: Path,
     batch_size: int = 3,
 ) -> List[Path]:
-    """
-    Processa legendas em lotes para melhor performance.
-    Para cada clipe, extrai áudio do vídeo ORIGINAL, gera legendas e adiciona áudio de volta.
-    
-    Args:
-        clips: Lista de clipes gerados (SEM ÁUDIO)
-        subtitle_gen: Instância do gerador de legendas
-        video_original_path: Caminho do vídeo original (COM ÁUDIO)
-        batch_size: Tamanho do lote para processamento paralelo
-    
-    Returns:
-        Lista de clipes finalizados com legendas e áudio
-    """
+    """Processa legendas em lotes paralelos."""
     clips_com_legendas = []
     total_clips = len(clips)
 
-    print(f"\n{Colors.bold('📊 Processando em lotes de')} {batch_size} clipes")
+    print(
+        f"\n{Colors.bold(f'📊 Processando {total_clips} clipe(s) em lotes de {batch_size}')}"
+    )
     print(f"{Colors.bold('=' * 60)}")
 
     for i in range(0, total_clips, batch_size):
@@ -150,285 +121,231 @@ async def process_subtitles_batch(
         print(f"\n{Colors.bold(f'📦 Lote {batch_num}/{total_batches}')}")
         print(f"{Colors.bold('-' * 40)}")
 
-        # ── Para cada clipe, extrai áudio do vídeo ORIGINAL ──
-        clips_com_audio = []
-        for clip in batch:
-            # Usa o vídeo ORIGINAL para extrair áudio
-            transcriber = TranscriberVideo(video_original_path)
-            
-            # Extrai áudio do vídeo original (não do clipe)
-            audio_path = transcriber.extract_audio()
-            
-            if audio_path:
-                clips_com_audio.append((clip, audio_path, transcriber))
-                print(f"  {Colors.success(f'🎵 Áudio extraído do original:')} {audio_path.name}")
-            else:
-                print(f"  {Colors.warning(f'⚠️ Falha ao extrair áudio do original para:')} {clip.name}")
-                clips_com_audio.append((clip, None, transcriber))
+        # Extrai áudio do vídeo original (reusa para todos os clipes do lote)
+        transcriber = TranscriberVideo(video_original_path)
+        audio_path = transcriber.extract_audio()
 
-        # ── Cria tarefas para processamento paralelo ──
-        tasks = []
-        for clip, audio_path, _ in clips_com_audio:
-            tasks.append(process_clip_with_retry(subtitle_gen, clip, audio_path))
+        if audio_path:
+            print(
+                f"  {Colors.success('🎵 Áudio extraído do original:')} {audio_path.name}"
+            )
+        else:
+            print(f"  {Colors.warning('⚠️ Falha ao extrair áudio')}")
 
-        # ── Executa tarefas do lote em paralelo ──
+        # Processa em paralelo
+        tasks = [
+            process_clip_with_retry(subtitle_gen, clip, audio_path) for clip in batch
+        ]
         batch_results = await asyncio.gather(*tasks)
 
-        # ── Processa resultados do lote e limpa áudio ──
-        for (clip, audio_path, transcriber), result in zip(clips_com_audio, batch_results):
-            # Limpa áudio temporário
-            if audio_path and audio_path.exists():
-                transcriber.cleanup_audio(audio_path)
-                print(f"  {Colors.info('🗑️ Áudio removido:')} {audio_path.name}")
+        # Limpa áudio
+        if audio_path and audio_path.exists():
+            transcriber.cleanup_audio(audio_path)
 
+        # Resultados
+        for clip, result in zip(batch, batch_results):
             if result:
                 clips_com_legendas.append(result)
                 size_mb = result.stat().st_size / (1024 * 1024)
-                print(
-                    f"  {Colors.success(f'✅ Clipe finalizado:')} {result.name} ({size_mb:.1f} MB)"
-                )
+                print(f"  {Colors.success('✅')} {result.name} ({size_mb:.1f} MB)")
             else:
-                print(f"  {Colors.error(f'❌ Falha no clipe:')} {clip.name}")
+                print(f"  {Colors.error('❌ Falha:')} {clip.name}")
 
-        # ── Pequena pausa entre lotes ──
         if i + batch_size < total_clips:
-            print(f"\n  {Colors.info('⏳ Aguardando 2s antes do próximo lote...')}")
+            print(f"\n  {Colors.info('⏳ Aguardando 2s...')}")
             await asyncio.sleep(2)
 
     return clips_com_legendas
 
 
-def print_status_header(title: str, char: str = "="):
-    """Imprime cabeçalho de status formatado."""
-    print(f"\n{Colors.bold(char * 60)}")
-    print(f"{Colors.bold(f'📊 {title}')}")
-    print(f"{Colors.bold(char * 60)}")
+def find_clips_to_process(
+    raw_clips_dir: Path, select_indices: Optional[List[int]] = None
+) -> List[Path]:
+    """
+    Encontra clipes para processar.
+    Prioriza *_final.mp4, depois *_clip_*.mp4 (exclui _hook).
+    """
+    all_clips = sorted(raw_clips_dir.glob("*.mp4"))
+
+    # Prioridade: _final > _clip_ > outros
+    final_clips = [c for c in all_clips if "_final" in c.name]
+    clip_clips = [c for c in all_clips if "_clip_" in c.name and "_final" not in c.name]
+    outros = [
+        c
+        for c in all_clips
+        if c not in final_clips and c not in clip_clips and "_hook" not in c.name
+    ]
+
+    candidates = final_clips + clip_clips + outros
+
+    if select_indices:
+        return [candidates[i - 1] for i in select_indices if 0 < i <= len(candidates)]
+
+    return candidates
 
 
-def print_file_list(files: List[Path], label: str = "Arquivos"):
-    """Imprime lista formatada de arquivos com tamanhos."""
-    if not files:
-        print(f"{Colors.warning('⚠️ Nenhum arquivo encontrado')}")
-        return
+def find_original_video(downloads_dir: Path, raw_clips_dir: Path) -> Optional[Path]:
+    """
+    Encontra o vídeo original em downloads/ correspondente aos clipes.
+    """
+    # Tenta achar pelo nome base
+    for clip in raw_clips_dir.glob("*_final.mp4"):
+        base = clip.name.split("_clip_")[0].split("_final")[0]
+        candidate = downloads_dir / f"{base}.mp4"
+        if candidate.exists():
+            return candidate
 
-    print(f"\n{Colors.info(f'📁 {label}:')}")
-    total_size = 0
-    for file in files:
-        size = file.stat().st_size / (1024 * 1024)
-        total_size += size
-        icon = "🎬" if "final" in file.name else "📼"
-        print(f"  {icon} {file.name} ({size:.1f} MB)")
-    print(f"\n{Colors.bold(f'📊 Total: {total_size:.1f} MB')}")
+    # Primeiro .mp4 em downloads/ que não seja _hook ou _clip
+    for v in sorted(downloads_dir.glob("*.mp4")):
+        if "_hook" not in v.name and "_clip_" not in v.name:
+            return v
+
+    return None
 
 
-@execution_time_of_a_function
 async def main():
+    import argparse
+
     parser = argparse.ArgumentParser(
-        description="Processador de vídeos para YouTube Shorts com legendas inteligentes",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Exemplos de uso:
-  python ffm_peg.py --video meu_video.mp4
-  python ffm_peg.py --video meu_video.mp4 --num-shots 15 --duration 45
-  python ffm_peg.py --video meu_video.mp4 --no-tracking --no-subtitles
-  python ffm_peg.py --video meu_video.mp4 --batch-size 4 --retries 3
-        """,
-    )
-
-    # Argumentos principais
-    parser.add_argument(
-        "--video",
-        required=True,
-        help="Nome do arquivo de vídeo a processar",
+        description="Gerador de legendas para clipes já cortados"
     )
     parser.add_argument(
-        "--num-shots",
-        type=int,
-        default=10,
-        help="Número de clipes a gerar (padrão: 10)",
+        "--video", help="Caminho do vídeo original (para extrair áudio)"
     )
+    parser.add_argument("--select", help="Índices dos clipes (ex: 1,3,5)")
+    parser.add_argument("--batch-size", type=int, default=3, help="Clipes em paralelo")
     parser.add_argument(
-        "--duration",
-        type=int,
-        default=90,
-        help="Duração de cada clipe em segundos (padrão: 60)",
-    )
-
-    # Opções de processamento
-    parser.add_argument(
-        "--no-tracking",
-        action="store_true",
-        help="Desativa tracking de rostos (usa apenas FFmpeg)",
-    )
-    parser.add_argument(
-        "--no-subtitles",
-        action="store_true",
-        help="Pula geração de legendas",
-    )
-
-    # Opções avançadas de legendas
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=3,
-        help="Número de clipes processados em paralelo (padrão: 3)",
-    )
-    parser.add_argument(
-        "--retries",
-        type=int,
-        default=2,
-        help="Número de tentativas por clipe em caso de falha (padrão: 2)",
-    )
-    parser.add_argument(
-        "--no-lazy",
-        action="store_true",
-        help="Carrega Whisper na inicialização (mais lento, mas primeira legenda mais rápida)",
+        "--all", action="store_true", help="Processar todos sem perguntar"
     )
 
     args = parser.parse_args()
 
-    # Validações
-    if args.num_shots <= 0:
-        print(f"{Colors.error('❌ num-shots deve ser maior que 0')}")
+    # Diretórios
+    raw_clips_dir = ROOT_DIR / "processed_videos" / "raw_clips"
+    final_clips_dir = ROOT_DIR / "processed_videos" / "final_clips"
+    downloads_dir = ROOT_DIR / "downloads"
+
+    final_clips_dir.mkdir(parents=True, exist_ok=True)
+
+    if not raw_clips_dir.exists():
+        print(Colors.error(f"❌ Diretório não encontrado: {raw_clips_dir}"))
         return
 
-    if args.duration <= 0:
-        print(f"{Colors.error('❌ duration deve ser maior que 0')}")
+    # Encontra clipes
+    select = None
+    if args.select:
+        try:
+            select = [int(x.strip()) for x in args.select.split(",")]
+        except ValueError:
+            print(Colors.warning("⚠️ Índices inválidos, processando todos"))
+
+    clips = find_clips_to_process(raw_clips_dir, select)
+
+    if not clips:
+        print(Colors.warning("⚠️ Nenhum clipe encontrado em raw_clips/"))
         return
 
-    if args.batch_size <= 0:
-        print(f"{Colors.error('❌ batch-size deve ser maior que 0')}")
-        args.batch_size = 3
+    # Encontra vídeo original
+    if args.video:
+        video_original = Path(args.video)
+        if not video_original.exists():
+            video_original = downloads_dir / args.video
+    else:
+        video_original = find_original_video(downloads_dir, raw_clips_dir)
 
-    # ── Caminho do vídeo original ──
-    video_original_path = ROOT_DIR / "downloads" / args.video
-    print(f"{Colors.info('📹 Vídeo original:')} {video_original_path}")
-
-    # Verifica se o vídeo original existe
-    if not video_original_path.exists():
-        print(f"{Colors.error(f'❌ Vídeo original não encontrado: {video_original_path}')}")
-        print(f"  {Colors.info('💡 Certifique-se de que o vídeo está na pasta downloads/')}")
-        return
-
-    # Inicializa processador de vídeo
-    processor = VideoProcessor(num_shots=args.num_shots)
-    processor.clip_duration = args.duration
-
-    # HEADER PRINCIPAL
-    print(f"\n{Colors.bold('=' * 70)}")
-    print(f"{Colors.bold('🎯 PERFECT SPEAKER TRACKER - YOUTUBE SHORTS')}")
-    print(f"{Colors.bold('=' * 70)}")
-
-    # Configuração
-    print(f"\n{Colors.bold('⚙️ CONFIGURAÇÃO:')}")
-    print(f"  {Colors.info('📹 Vídeo:')} {args.video}")
-    print(f"  {Colors.info('🎬 Clipes:')} {args.num_shots} x {args.duration}s")
-    print(f"  {Colors.info('🔍 Zoom:')} Reduzido (+ contexto)")
-    print(
-        f"  {Colors.info('🎯 Modo tracking:')} {'Ativado' if not args.no_tracking else 'Desativado'}"
-    )
-    print(
-        f"  {Colors.info('📝 Legendas:')} {'Ativadas' if not args.no_subtitles else 'Desativadas'}"
-    )
-
-    if not args.no_subtitles:
+    if not video_original or not video_original.exists():
         print(
-            f"  {Colors.info('🎨 Estilo legendas:')} Impact (Centro-Inferior) + Borda AZUL + Word-by-Word"
+            Colors.warning(
+                "⚠️ Vídeo original não encontrado. O áudio não será adicionado."
+            )
         )
-        print(f"  {Colors.info('🛡️ Censura:')} Palavras ofensivas bloqueadas")
-        print(f"  {Colors.info('📦 Batch size:')} {args.batch_size}")
-        print(f"  {Colors.info('🔄 Retries:')} {args.retries}")
+        print(Colors.info("💡 Use --video para especificar o caminho."))
+        video_original = None
 
+    # HEADER
+    print(f"\n{Colors.bold('=' * 70)}")
+    print(f"{Colors.bold('🎯 GERADOR DE LEGENDAS - YOUTUBE SHORTS')}")
     print(f"{Colors.bold('=' * 70)}")
 
-    # PRIMEIRA ETAPA: Gerar os clipes
-    print(f"\n{Colors.bold('🎬 PRIMEIRA ETAPA: GERANDO CLIPES')}")
+    print(f"\n{Colors.bold('⚙️ CONFIGURAÇÃO:')}")
+    print(f"  {Colors.info('📁 Clipes:')} {len(clips)} encontrado(s)")
+    print(
+        f"  {Colors.info('📹 Original:')} {video_original.name if video_original else 'N/A'}"
+    )
+    print(f"  {Colors.info('🎨 Estilo:')} Impact + Borda AZUL + Word-by-Word")
+    print(f"  {Colors.info('📦 Batch:')} {args.batch_size}")
+
+    # Lista clipes
+    print(f"\n{Colors.bold('📋 CLIPES:')}")
+    for i, c in enumerate(clips, 1):
+        size_mb = c.stat().st_size / (1024 * 1024)
+        print(f"  {i}. {c.name} ({size_mb:.1f} MB)")
+
+    # Confirma
+    if not args.all:
+        confirm = (
+            input(f"\n{Colors.info('🎬 Processar esses clipes? (s/n):')} ")
+            .strip()
+            .lower()
+        )
+        if confirm != "s":
+            print(Colors.warning("⚠️ Cancelado"))
+            return
+
+    print(f"\n{Colors.bold('=' * 70)}")
+    print(f"{Colors.bold('📝 GERANDO LEGENDAS...')}")
     print(f"{Colors.bold('=' * 70)}")
+
+    subtitle_gen = SubtitleGenerator()
 
     start_time = asyncio.get_event_loop().time()
-    clips = await processor.process(
-        video_name=args.video,
-        tracking=not args.no_tracking,
-    )
-    elapsed_time = asyncio.get_event_loop().time() - start_time
 
-    # Resumo primeira etapa
-    print_status_header("RESUMO DA PRIMEIRA ETAPA")
-    print(f"  {Colors.success('✅ Clipes gerados:')} {len(clips)}/{args.num_shots}")
-    print(f"  {Colors.info('⏱️ Tempo total:')} {elapsed_time:.1f}s")
-
-    if clips:
-        print_file_list(clips, "CLIPES BRUTOS GERADOS (SEM ÁUDIO)")
-    else:
-        print(f"\n{Colors.error('❌ Nenhum clipe foi gerado!')}")
-        return
-
-    # SEGUNDA ETAPA: Transcrever os clipes (se não for pulado)
-    if not args.no_subtitles and clips:
-        print(f"\n{Colors.bold('🎬 SEGUNDA ETAPA: GERANDO LEGENDAS')}")
-        print(f"{Colors.bold('=' * 70)}")
-        print(f"  {Colors.info('🎨 Estilo:')} Impact + Borda AZUL + Destaque Amarelo")
-        print(f"  {Colors.info('🛡️ Proteção:')} Palavras ofensivas censuradas")
-        print(f"  {Colors.info('🔄 Modo:')} Extrai áudio do ORIGINAL → Gera legenda → Adiciona áudio de volta")
-        print(f"{Colors.bold('-' * 70)}")
-
-        # Mostra preview das palavras censuradas
-        print(f"\n  {Colors.info('📋 Palavras protegidas:')}")
-        bad_words_sample = list(BAD_WORDS.keys())[:5]
-        for word in bad_words_sample:
-            censored = BAD_WORDS[word]
-            print(f"  • {word} → {censored} ⚠️")
-
-        # Inicializa o gerador de legendas
-        subtitle_gen = SubtitleGenerator()
-
-        # Processa legendas em lotes (com áudio do vídeo ORIGINAL)
-        start_time = asyncio.get_event_loop().time()
+    if video_original:
         clips_com_legendas = await process_subtitles_batch(
-            clips, 
-            subtitle_gen, 
-            video_original_path,
-            batch_size=args.batch_size
+            clips, subtitle_gen, video_original, batch_size=args.batch_size
         )
-        elapsed_time = asyncio.get_event_loop().time() - start_time
+    else:
+        # Sem vídeo original: processa sem áudio extra
+        tasks = [process_clip_with_retry(subtitle_gen, clip, None) for clip in clips]
+        results = await asyncio.gather(*tasks)
+        clips_com_legendas = [r for r in results if r is not None]
 
-        # Status final das legendas
-        print_status_header("STATUS DAS LEGENDAS")
-        print(
-            f"  {Colors.success('✅ Clipes com legendas e áudio:')} {len(clips_com_legendas)}/{len(clips)}"
-        )
-        print(f"  {Colors.info('⏱️ Tempo transcrição:')} {elapsed_time:.1f}s")
+    elapsed = asyncio.get_event_loop().time() - start_time
 
-        if clips_com_legendas:
-            print_file_list(clips_com_legendas, "CLIPES FINAIS COM LEGENDAS + ÁUDIO")
-        else:
-            print(f"\n{Colors.warning('⚠️ Nenhuma legenda foi gerada!')}")
+    # Move para final_clips/ e renomeia
+    final_clips = []
+    for clip_path in clips_com_legendas:
+        dest = final_clips_dir / clip_path.name
+        if clip_path.parent != final_clips_dir:
+            import shutil
 
-    # FOOTER FINAL
+            shutil.move(str(clip_path), str(dest))
+        final_clips.append(dest)
+
+    # FOOTER
     print(f"\n{Colors.bold('=' * 70)}")
-    print(f"{Colors.success('✅ PROCESSAMENTO CONCLUÍDO COM SUCESSO!')}")
+    print(f"{Colors.success('✅ PROCESSAMENTO CONCLUÍDO!')}")
     print(f"{Colors.bold('=' * 70)}")
-
-    # Localização dos arquivos
-    print(f"\n{Colors.info('📁 ARQUIVOS GERADOS:')}")
     print(
-        f"  {Colors.info('📼 Clipes brutos (sem áudio):')} {ROOT_DIR}/processed_videos/raw_clips/"
+        f"  {Colors.success('🎬 Clipes com legenda:')} {len(final_clips)}/{len(clips)}"
     )
-    print(
-        f"  {Colors.info('🎬 Clipes finais (com legendas + áudio):')} {ROOT_DIR}/processed_videos/final_clips/"
-    )
+    print(f"  {Colors.info('⏱️ Tempo total:')} {elapsed:.1f}s")
+    print(f"  {Colors.info('📁 Final clips:')} {final_clips_dir}")
 
-    print(f"\n{Colors.bold('✨ Obrigado por usar o Perfect Speaker Tracker!')}")
+    if final_clips:
+        total_size = sum(f.stat().st_size for f in final_clips) / (1024 * 1024)
+        print(f"  {Colors.info('📊 Tamanho total:')} {total_size:.1f} MB")
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print(f"\n\n{Colors.warning('⚠️ Processamento interrompido pelo usuário.')}")
+        print(f"\n\n{Colors.warning('⚠️ Interrompido pelo usuário.')}")
         sys.exit(0)
     except Exception as e:
         print(f"\n{Colors.error(f'❌ Erro fatal: {e}')}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
