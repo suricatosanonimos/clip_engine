@@ -103,6 +103,7 @@ class PipelineRunner:
         print(f"{Colors.header('🎬 CLIP ENGINE - PIPELINE COMPLETO')}")
         print(f"{Colors.header('=' * 70)}")
 
+    # No menu, adicione a opção 7:
     def print_menu(self):
         """Menu principal interativo."""
         print(f"\n{Colors.bold('📋 MENU PRINCIPAL:')}")
@@ -113,8 +114,44 @@ class PipelineRunner:
         print(f"  {Colors.info('3.')} Processar clipes brutos existentes (raw_clips/)")
         print(f"  {Colors.info('4.')} Gerar legendas para clipes em raw_clips/")
         print(f"  {Colors.info('5.')} Pipeline COMPLETO (download → corte → legenda)")
-        print(f"  {Colors.info('6.')} Limpar arquivos temporários")
+        print(f"  {Colors.info('6.')} Aplicar moldura/background nos clipes")  # ⬅️ NOVO
+        print(f"  {Colors.info('7.')} Limpar arquivos temporários")
         print(f"  {Colors.info('0.')} Sair")
+
+    def step_apply_frame(self):
+        """Aplica moldura/background aos clipes - abre GUI completa."""
+        print(f"\n{Colors.header('━' * 60)}")
+        print(f"{Colors.header('🖼️  APLICAR MOLDURA/BACKGROUND')}")
+        print(f"{Colors.header('━' * 60)}")
+        print(f"\n{Colors.info('🖱️  Abrindo configurador visual...')}")
+        print(
+            f"{Colors.info('   Selecione a moldura, ajuste o tamanho e escolha os vídeos.')}"
+        )
+
+        # Abre a GUI diretamente - ela faz tudo
+        from src.utils.apply_frame import FrameApplierGUI
+
+        gui = FrameApplierGUI()
+        result = gui.run()
+
+        if result is None:
+            print(f"\n{Colors.warning('⚠️  Cancelado pelo usuário.')}")
+            return
+
+        # Aplica moldura aos vídeos selecionados
+        from src.utils.apply_frame import FrameApplier
+
+        applier = FrameApplier(
+            frame_path=result["frame_path"],
+            video_area=result["video_area"],
+        )
+
+        processed = applier.apply_to_all(
+            video_paths=result["videos"],
+            remove_originals=True,
+        )
+
+        print(f"\n{Colors.success(f'✅ {len(processed)} vídeo(s) com moldura!')}")
 
     def list_videos_in_downloads(self) -> List[Path]:
         """Lista vídeos disponíveis em downloads/."""
@@ -509,6 +546,8 @@ class PipelineRunner:
             elif choice == "5":
                 self.step_full_pipeline()
             elif choice == "6":
+                self.step_apply_frame()
+            elif choice == "7":
                 self.step_cleanup()
             elif choice == "0":
                 print(f"\n{Colors.success('👋 Até logo!')}")
