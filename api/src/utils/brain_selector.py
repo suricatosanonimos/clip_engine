@@ -3,7 +3,8 @@
 src/utils/brain_selector.py
 
 Fase 2: Analisa os clipes com IA e seleciona os melhores momentos.
-Lê clipes de raw_clips/, transcreve com Whisper, e usa BestMoments para análise.
+Lê clipes de raw_clips/, transcreve com Whisper de forma dinâmica e leve,
+e usa BestMoments para análise focada nos pedaços cortados.
 """
 
 import asyncio
@@ -22,11 +23,8 @@ from src.utils.logs import logger
 
 class BrainSelector:
     """
-    Analisa clipes de vídeo com IA para selecionar os melhores momentos.
-
-    Suporta:
-    - JSON de clipes (*_clipes.json, *_final.json)
-    - Scan direto de arquivos .mp4 na pasta
+    Analisa clipes de vídeo curtíssimos com IA para selecionar os melhores momentos.
+    Focado 100% em velocidade, ignorando completamente o vídeo bruto original.
     """
 
     def __init__(self):
@@ -46,22 +44,13 @@ class BrainSelector:
         return self.whisper_instance
 
     def _find_clips(self, video_base_name: Optional[str] = None) -> List[Dict]:
-        """
-        Encontra clipes para analisar.
-
-        Prioridade:
-        1. JSON *_clipes.json ou *_final.json
-        2. Scan de arquivos .mp4 na pasta
-        """
+        """Encontra os clipes pré-cortados na pasta para análise."""
         clipes = []
-
-        # Tenta JSON primeiro
         json_patterns = ["*_clipes.json", "*_final.json"]
         if video_base_name:
             json_patterns = [
                 f"{video_base_name}_clipes.json",
                 f"{video_base_name}_final.json",
-                f"{video_base_name}_clipes.json",
             ]
 
         for pattern in json_patterns:
@@ -70,67 +59,47 @@ class BrainSelector:
                     with open(json_file, "r", encoding="utf-8") as f:
                         data = json.load(f)
                     if isinstance(data, list) and len(data) > 0:
-                        # Verifica se tem campo 'path'
                         if "path" in data[0]:
-                            clipes = data
-                            logger.info(
-                                f"📁 Loaded {len(clipes)} clips from {json_file.name}"
-                            )
-                            return clipes
+                            logger.info(f"📁 Loaded {len(clipes)} clips from {json_file.name}")
+                            return data
                 except Exception as e:
                     logger.warning(f"⚠️  Error reading {json_file.name}: {e}")
 
-        # Fallback: scan de arquivos .mp4 (exclui _hook e _final)
+        # Fallback: scan de arquivos .mp4 cortados (ignora ganchos antigos)
         mp4_files = sorted(self.raw_clips_dir.glob("*.mp4"))
         for mp4 in mp4_files:
-            # Pula ganchos e finais (já processados)
             if "_hook" in mp4.name or "_final" in mp4.name:
                 continue
 
-            # Obtém info do vídeo
             try:
                 import subprocess
-
                 cmd = [
-                    "ffprobe",
-                    "-v",
-                    "error",
-                    "-show_entries",
-                    "format=duration",
-                    "-of",
-                    "default=noprint_wrappers=1:nokey=1",
-                    str(mp4),
+                    "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                    "-of", "default=noprint_wrappers=1:nokey=1", str(mp4)
                 ]
-                result = subprocess.run(
-                    cmd,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    check=True,
-                )
+                result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
                 duration = float(result.stdout.strip())
             except Exception:
                 duration = 0
 
-            clipes.append(
-                {
-                    "clip_id": len(clipes) + 1,
-                    "filename": mp4.name,
-                    "path": str(mp4),
-                    "start": 0,
-                    "end": duration,
-                    "duration": duration,
-                }
-            )
+            clipes.append({
+                "clip_id": len(clipes) + 1,
+                "filename": mp4.name,
+                "path": str(mp4),
+                "start": 0,
+                "end": duration,
+                "duration": duration,
+            })
 
         if clipes:
             logger.info(f"📁 Found {len(clipes)} clips via .mp4 scan")
-
         return clipes
 
-    async def transcribe_clip(self, video_path: Path) -> List[Dict]:
-        """Transcreve um clipe e retorna frases com timestamps."""
+    async def transcribe_clip(self, video_path: Path, max_duration: Optional[float] = None) -> List[Dict]:
+        """Transcreve o clipe limitando o áudio estritamente ao tamanho dele + margem."""
         logger.info(f"🎙️ Transcribing: {video_path.name}")
+        if max_duration:
+            logger.info(f"⏱️ Whisper processing limit: {max_duration:.1f}s")
 
         whisper_instance = self._get_whisper()
         loop = asyncio.get_event_loop()
@@ -147,6 +116,7 @@ class BrainSelector:
                     initial_prompt="Áudio em português do Brasil",
                     temperature=0.0,
                     condition_on_previous_text=False,
+                    clip_duration=max_duration  # 🔥 Aplica a restrição de tempo dinamicamente!
                 ),
             )
 
@@ -162,27 +132,20 @@ class BrainSelector:
                         texto_atual += " " + word.word
 
                         if texto_atual.strip().endswith((".", "!", "?")):
-                            frases.append(
-                                {
-                                    "start": start_atual,
-                                    "end": word.end,
-                                    "text": texto_atual.strip(),
-                                }
-                            )
+                            frases.append({
+                                "start": start_atual,
+                                "end": word.end,
+                                "text": texto_atual.strip(),
+                            })
                             texto_atual = ""
                             start_atual = None
-                        elif hasattr(word, "end") and len(texto_atual.strip()) > 10:
-                            # Pausa > 0.5s = nova frase
-                            pass  # Simplificado: usa só pontuação
 
             if texto_atual.strip():
-                frases.append(
-                    {
-                        "start": start_atual or 0,
-                        "end": segment.end if hasattr(segment, "end") else 0,
-                        "text": texto_atual.strip(),
-                    }
-                )
+                frases.append({
+                    "start": start_atual or 0,
+                    "end": segment.end if hasattr(segment, "end") else 0,
+                    "text": texto_atual.strip(),
+                })
 
             return frases
 
@@ -191,7 +154,7 @@ class BrainSelector:
             return []
 
     async def analyze_clip(self, clipe: Dict) -> Dict:
-        """Analisa um clipe: transcreve e usa IA para encontrar momentos."""
+        """Analisa o clipe individual focado no gancho interno."""
         video_path = Path(clipe["path"])
 
         if not video_path.exists():
@@ -201,8 +164,12 @@ class BrainSelector:
             clipe["score"] = 0
             return clipe
 
-        # Transcrever
-        frases = await self.transcribe_clip(video_path)
+        # 🧠 REGRA DE SEGURANÇA: Duração do clipe + 20 segundos de margem
+        duracao_clipe = clipe.get("duration", 0)
+        limite_whisper = duracao_clipe + 20.0 if duracao_clipe > 0 else None
+
+        # Transcrever apenas a dimensão real do clipe
+        frases = await self.transcribe_clip(video_path, max_duration=limite_whisper)
 
         if not frases:
             logger.warning(f"⚠️ No speech in: {video_path.name}")
@@ -211,29 +178,25 @@ class BrainSelector:
             clipe["score"] = 0
             return clipe
 
-        # Salvar transcrição
+        # Salvar transcrição local do clipe
         transcription_data = {
             "video": str(video_path),
             "video_name": video_path.stem,
-            "duration": clipe.get("duration", 0),
+            "duration": duracao_clipe,
             "segments": frases,
             "total_segments": len(frases),
         }
 
-        transcription_path = (
-            self.transcriptions_dir / f"{video_path.stem}_transcription.json"
-        )
+        transcription_path = self.transcriptions_dir / f"{video_path.stem}_transcription.json"
         with open(transcription_path, "w", encoding="utf-8") as f:
             json.dump(transcription_data, f, ensure_ascii=False, indent=2)
 
         clipe["transcription_path"] = str(transcription_path)
         clipe["transcription_segments"] = len(frases)
 
-        # Analisar com IA
+        # Encontrar momentos interessantes APENAS dentro desta janela curta
         try:
-            resultado = self.best_moments.find_best_moments(
-                frases, clipe.get("duration", 0)
-            )
+            resultado = self.best_moments.find_best_moments(frases, duracao_clipe)
 
             if resultado and isinstance(resultado, dict):
                 momentos = resultado.get("moments", [])
@@ -259,20 +222,8 @@ class BrainSelector:
 
         return clipe
 
-    async def select_best_clips(
-        self, clipes_json_path: str = None, video_base_name: str = None
-    ) -> List[Dict]:
-        """
-        Carrega clipes, transcreve, analisa e seleciona os melhores.
-
-        Args:
-            clipes_json_path: Caminho para JSON (opcional)
-            video_base_name: Nome base para busca automática
-
-        Returns:
-            Lista de clipes selecionados
-        """
-        # Encontra clipes
+    async def select_best_clips(self, clipes_json_path: str = None, video_base_name: str = None) -> List[Dict]:
+        """Carrega e executa a análise veloz em cima da lista de clipes curtos."""
         if clipes_json_path and Path(clipes_json_path).exists():
             with open(clipes_json_path, "r", encoding="utf-8") as f:
                 clipes = json.load(f)
@@ -284,12 +235,8 @@ class BrainSelector:
             return []
 
         print(f"\n{'='*60}")
-        print(f"🧠 BRAIN SELECTOR - Analyzing {len(clipes)} clips with AI")
+        print(f"🧠 FAST BRAIN SELECTOR - Focado 100% em Clipes Curtos")
         print(f"{'='*60}")
-        print(f"📁 Raw clips: {self.raw_clips_dir}")
-        print(f"📁 Transcriptions: {self.transcriptions_dir}")
-        print(f"📁 Moments: {self.moments_dir}")
-        print("-" * 60)
 
         resultados = []
         for i, clipe in enumerate(clipes, 1):
@@ -298,104 +245,23 @@ class BrainSelector:
             resultados.append(resultado)
 
             if resultado.get("interesting"):
-                score = resultado.get("score", 0)
-                moments_count = len(resultado.get("moments", []))
-                print(f"   ✅ INTERESTING (score: {score}, moments: {moments_count})")
+                print(f"   ✅ Clip Válido! Score: {resultado.get('score', 0)}")
             else:
-                motivo = resultado.get("analysis", "unknown")
-                print(f"   ⏩ Skipping ({motivo})")
+                print(f"   ⏩ Ignorado ({resultado.get('analysis', 'unknown')})")
 
-        # Filtra e ordena
+        # Ordenação inteligente
         selecionados = [r for r in resultados if r.get("interesting")]
         selecionados.sort(key=lambda x: x.get("score", 0), reverse=True)
 
-        # Salva resultados
+        # Salva relatórios de tracking
         base_name = video_base_name or "analysis"
         if clipes and "filename" in clipes[0]:
             base_name = clipes[0]["filename"].split("_clip_")[0]
 
-        analysis_path = self.moments_dir / f"{base_name}_analysis.json"
-        with open(analysis_path, "w", encoding="utf-8") as f:
+        with open(self.moments_dir / f"{base_name}_analysis.json", "w", encoding="utf-8") as f:
             json.dump(resultados, f, ensure_ascii=False, indent=2)
 
-        selected_path = self.moments_dir / f"{base_name}_selected.json"
-        with open(selected_path, "w", encoding="utf-8") as f:
+        with open(self.moments_dir / f"{base_name}_selected.json", "w", encoding="utf-8") as f:
             json.dump(selecionados, f, ensure_ascii=False, indent=2)
 
-        print(f"\n{'='*60}")
-        print(f"✅ ANALYSIS COMPLETED")
-        print(f"{'='*60}")
-        print(f"   📊 Total: {len(resultados)} | 🎯 Selected: {len(selecionados)}")
-        print(f"   💾 {analysis_path}")
-        print(f"   💾 {selected_path}")
-
         return selecionados
-
-
-async def main():
-    import sys
-
-    try:
-        whisper_instance = model()
-        print("✅ Whisper available!")
-    except Exception as e:
-        print(f"❌ Error loading Whisper: {e}")
-        sys.exit(1)
-
-    selector = BrainSelector()
-
-    if not selector.raw_clips_dir.exists():
-        print(f"❌ Raw clips directory not found: {selector.raw_clips_dir}")
-        sys.exit(1)
-
-    # Procura JSONs
-    json_files = list(selector.raw_clips_dir.glob("*_clipes.json")) + list(
-        selector.raw_clips_dir.glob("*_final.json")
-    )
-
-    print("=" * 60)
-    print("🧠 FASE 2: Brain Selector - Analyzing clips with AI")
-    print("=" * 60)
-
-    if json_files:
-        print(f"\n📁 Available JSONs:")
-        for i, jf in enumerate(json_files, 1):
-            print(f"   {i}. {jf.name}")
-
-        if len(json_files) == 1:
-            clipes_json = json_files[0]
-        else:
-            try:
-                choice = int(
-                    input(f"\n🔢 Choose (1-{len(json_files)}): ").strip() or "1"
-                )
-                clipes_json = json_files[choice - 1]
-            except (ValueError, IndexError):
-                clipes_json = json_files[0]
-
-        print(f"\n📁 Selected: {clipes_json.name}")
-        selecionados = await selector.select_best_clips(str(clipes_json))
-    else:
-        # Tenta scan direto de .mp4
-        print(f"\n⚠️  No JSON found, scanning .mp4 files...")
-        selecionados = await selector.select_best_clips()
-
-    if selecionados:
-        print(f"\n{'='*60}")
-        print(f"🏆 SELECTED CLIPS")
-        print(f"{'='*60}")
-        for i, clip in enumerate(selecionados, 1):
-            print(f"\n   {i}. {clip.get('filename', 'unknown')}")
-            print(
-                f"      Score: {clip.get('score', 0)} | Moments: {len(clip.get('moments', []))}"
-            )
-            for m in clip.get("moments", [])[:2]:
-                print(
-                    f"      🎯 [{m.get('start',0)}s-{m.get('end',0)}s] {m.get('text','')[:60]}..."
-                )
-    else:
-        print("\n⚠️ No interesting clips found.")
-
-
-if __name__ == "__main__":
-    asyncio.run(main())

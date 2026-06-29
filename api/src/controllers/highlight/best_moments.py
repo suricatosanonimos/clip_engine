@@ -59,8 +59,8 @@ class BestMoments(Brain):
             # ── Prepare transcription ──
             formatted_transcription = self._format_transcription(transcription)
 
-            if len(formatted_transcription) > 3000:
-                formatted_transcription = formatted_transcription[:3000]
+            if len(formatted_transcription) > 6000:
+                formatted_transcription = formatted_transcription[:6000]
 
             # ── Build prompt ──
             prompt = self._build_moments_prompt(formatted_transcription)
@@ -71,16 +71,16 @@ class BestMoments(Brain):
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are a video editor specializing in identifying viral moments for Shorts/Reels.",
+                        "content": "You are a video editor specializing in identifying viral moments for Shorts/Reels. You strictly follow the requested response format.",
                     },
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.4,
-                max_tokens=500,
+                max_tokens=800,
             )
 
             content = response.choices[0].message.content
-            logger.info(f"AI response (moments): {content[:300]}...")
+            logger.info(f"AI response (moments):\n{content}")
 
             # ── Extract moments from text ──
             moments = self._extract_moments_from_text(content, video_duration)
@@ -202,7 +202,7 @@ class BestMoments(Brain):
             "moments": moments,
             "source": (
                 "AI (Groq)"
-                if moments and moments[0].get("reason") != "Manual selection"
+                if moments and "Manual selection" not in moments[0].get("reason", "")
                 else "Manual selection"
             ),
         }
@@ -232,9 +232,9 @@ class BestMoments(Brain):
     def _format_transcription(self, transcription: List[Dict]) -> str:
         """Formats transcription for the AI prompt."""
         lines = []
-        for item in transcription[:30]:
+        for item in transcription:
             start = item.get("start", 0)
-            text = item.get("text", "")[:150]
+            text = item.get("text", "").strip()
             minutes = int(start // 60)
             seconds = int(start % 60)
             lines.append(f"[{minutes:02d}:{seconds:02d}] {text}")
@@ -256,13 +256,13 @@ class BestMoments(Brain):
         - Choose moments with EMOTIONAL HOOKS or REVELATIONS
         - AVOID generic introductions or call to action parts
         
-        RESPONSE FORMAT (one moment per line):
+        RESPONSE FORMAT (one moment per line, do not add prefixes like "1." or "*"):
         Start: Xs, End: Ys - Text of the moment
         
         Transcription (with timestamps):
         {transcription}
         
-        Answer ONLY with the list of moments in the requested format.
+        Answer ONLY with the list of moments in the requested format. Do not write introductory or concluding text.
         """
 
     # ──────────────────────────────────────────────────────────────
@@ -273,7 +273,7 @@ class BestMoments(Brain):
         self, text: str, video_duration: float
     ) -> List[Dict]:
         """
-        Extracts moments from AI text response.
+        Extracts moments from AI text response using flexible regex expressions.
 
         Returns:
             List of moments: [{"start": int, "end": int, "text": str, "reason": str}, ...]
@@ -281,15 +281,18 @@ class BestMoments(Brain):
         moments = []
         lines = text.split("\n")
 
-        # Patterns for finding moments
+        # Robust and flexible patterns to accurately capture AI variations
         patterns = [
-            r"(?:start|in[íi]cio)\s*:?\s*(\d+\.?\d*)\s*s?\s*(?:end|fim)\s*:?\s*(\d+\.?\d*)\s*s?\s*[-–]\s*(.+)",
-            r"\[(\d+):(\d+)\s*[-–]\s*(\d+):(\d+)\]\s*(.+)",
-            r"(\d+\.?\d*)\s*s?\s*[-–]\s*(\d+\.?\d*)\s*s?\s*:?\s*(.+)",
+            r"(?:start|in[íi]cio)\s*:?\s*(\d+\.?\d*)\s*s?\s*,?\s*(?:end|fim)\s*:?\s*(\d+\.?\d*)\s*s?\s*[-–:]\s*(.+)",
+            r"\[?(\d+):(\d+)\s*[-–]\s*(\d+):(\d+)\]?\s*[-–:]?\s*(.+)",
+            r"(?:^\d+[\.\s\-]+)?(\d+\.?\d*)\s*s?\s*(?:[-–]|to|at[eé])\s*(\d+\.?\d*)\s*s?\s*[-–:]\s*(.+)",
+            r"(\d+\.?\d*)\s*s?\s*[-–]\s*(\d+\.?\d*)\s*s?\s*:?\s*(.+)"
         ]
 
         for line in lines:
             line = line.strip()
+            # Clean prefixes like * or numbering that the IA might generate incorrectly
+            line = re.sub(r'^(?:\*\s*|\d+[\.\)]\s*|-+\s*)', '', line).strip()
             if not line:
                 continue
 
@@ -327,7 +330,7 @@ class BestMoments(Brain):
                         {
                             "start": int(start),
                             "end": int(end),
-                            "text": moment_text[:100],
+                            "text": moment_text,
                             "reason": "Extracted from AI response",
                         }
                     )
@@ -407,52 +410,16 @@ class BestMoments(Brain):
 
         # Keywords to identify good moments (Portuguese + English)
         keywords_hook = [
-            "mas",
-            "porque",
-            "isso",
-            "aí",
-            "então",
-            "calma",
-            "olha",
-            "veja",
-            "but",
-            "because",
-            "this",
-            "then",
-            "wait",
-            "look",
-            "see",
-            "so",
+            "mas", "porque", "isso", "aí", "então", "calma", "olha", "veja",
+            "but", "because", "this", "then", "wait", "look", "see", "so",
         ]
         keywords_curiosity = [
-            "vazou",
-            "revelou",
-            "novidade",
-            "anunciou",
-            "oficial",
-            "surpresa",
-            "leaked",
-            "revealed",
-            "news",
-            "announced",
-            "official",
-            "surprise",
+            "vazou", "revelou", "novidade", "anunciou", "oficial", "surpresa",
+            "leaked", "revealed", "news", "announced", "official", "surprise",
         ]
         keywords_emotion = [
-            "uau",
-            "incrível",
-            "caramba",
-            "nossa",
-            "top",
-            "muito",
-            "demais",
-            "wow",
-            "incredible",
-            "amazing",
-            "awesome",
-            "top",
-            "very",
-            "so much",
+            "uau", "incrível", "caramba", "nossa", "top", "muito", "demais",
+            "wow", "incredible", "amazing", "awesome", "very", "so much",
         ]
 
         # Score each sentence
@@ -509,78 +476,23 @@ class BestMoments(Brain):
                 {
                     "start": int(item.get("start", 0)),
                     "end": int(item.get("end", item.get("start", 0) + 5)),
-                    "text": item.get("text", "")[:100],
+                    "text": item.get("text", ""),
                     "reason": f"Manual selection (score: {item.get('score', 0)})",
                 }
             )
 
         return moments
 
-
-if __name__ == "__main__":
-    import sys
-
-    best_moments = BestMoments()
-
-    # Procura por transcrições em processed_videos/transcriptions/
-    transcriptions_dir = Path(f"{ROOT_DIR}/processed_videos/transcriptions")
-
-    if not transcriptions_dir.exists():
-        print(f"❌ Transcriptions directory not found: {transcriptions_dir}")
-        print("   Run brain_selector.py first to generate transcriptions")
-        sys.exit(1)
-
-    json_files = list(transcriptions_dir.glob("*_transcription.json"))
-
-    if not json_files:
-        print(f"❌ No transcription files found in: {transcriptions_dir}")
-        sys.exit(1)
-
-    print("=" * 60)
-    print("🧠 BestMoments - Selecting Best Moments")
-    print("=" * 60)
-    print(f"\n📁 Available transcriptions:")
-    for i, jf in enumerate(json_files, 1):
-        print(f"   {i}. {jf.name}")
-
-    # Usa o primeiro ou permite escolher
-    if len(json_files) == 1:
-        json_path = json_files[0]
-    else:
-        try:
-            choice = int(input(f"\n🔢 Choose (1-{len(json_files)}): ").strip() or "1")
-            json_path = json_files[choice - 1]
-        except (ValueError, IndexError):
-            json_path = json_files[0]
-
-    print(f"\n📁 Selected: {json_path.name}")
-
-    result = best_moments.select_best_moments_from_file(
-        json_file=str(json_path), num_moments=3, save_json=True
-    )
-
-    if "error" in result:
-        print(f"❌ Error: {result['error']}")
-        sys.exit(1)
-
-    print("\n" + "=" * 60)
-    print("📊 FINAL RESULT")
-    print("=" * 60)
-    print(f"📹 Video: {result.get('video_name', 'Unknown')}")
-    print(f"📝 Total sentences: {result.get('total_sentences', 0)}")
-    print(f"🎯 Moments selected: {result.get('num_moments', 0)}")
-    print(f"🤖 Source: {result.get('source', 'Unknown')}")
-
-    print("\n🏆 BEST MOMENTS:")
-    for i, m in enumerate(result.get("moments", []), 1):
-        start = m.get("start", 0)
-        end = m.get("end", 0)
-        text = m.get("text", "")
-        reason = m.get("reason", "")
-        print(f"\n  {i}. [{start}s - {end}s]")
-        print(f"     📝 {text}")
-        if reason:
-            print(f"     💡 {reason}")
-
-    print("\n" + "=" * 60)
-    print("✅ Process completed!")
+    def _fallback_moments(self, transcription: List[Dict], video_duration: float) -> Dict[str, Any]:
+        """Fallback when extraction completely fails or throws error."""
+        moments = []
+        if transcription:
+            for i, seg in enumerate(transcription[:3]):
+                moments.append({
+                    "id": i + 1,
+                    "start": int(seg.get("start", 0)),
+                    "end": int(seg.get("end", seg.get("start", 0) + 5)),
+                    "text": seg.get("text", ""),
+                    "reason": "Highlight moment (fallback)"
+                })
+        return {"moments": moments}

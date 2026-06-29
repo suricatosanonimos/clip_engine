@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-src/utils/video_splitter_fast.py
+src/utils/video_splitter.py
 
-Corta vídeos rapidamente com suporte a 9:16 e gancho via IA.
+Corta vídeos rapidamente com suporte a 9:16 e gancho focado em velocidade bruta.
+OTIMIZADO: Elimina completamente análises e transcrições do vídeo bruto original.
 """
 
 import json
@@ -19,17 +20,16 @@ sys.path.insert(0, str(ROOT_DIR))
 
 try:
     from src.utils.brain_selector import BrainSelector
-
     HAS_BRAIN_SELECTOR = True
 except ImportError:
     HAS_BRAIN_SELECTOR = False
 
 
 class VideoSplitterFast:
-    """Cortador de vídeos rápido com FFmpeg."""
+    """Cortador de vídeos rápido com FFmpeg focado em clipes."""
 
     CRF_DEFAULT = 20
-    PRESET = "fast"
+    PRESET = "veryfast"
 
     def __init__(
         self,
@@ -37,12 +37,14 @@ class VideoSplitterFast:
         output_format: str = "9:16",
         crop_mode: str = "center",
         num_threads: int = 2,
+        zoom_factor: float = 1.0,
     ) -> None:
         self.base_dir = Path(base_dir) if base_dir else Path("downloads")
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self.output_format = output_format
         self.crop_mode = crop_mode
         self.num_threads = num_threads
+        self.zoom_factor = zoom_factor
 
         self.target_width = 720
         self.target_height = 1280
@@ -50,41 +52,26 @@ class VideoSplitterFast:
         self.landscape_height = 720
 
     # ══════════════════════════════════════════════════════════════
-    #  INFORMAÇÕES DO VÍDEO (CORRIGIDO)
+    #  INFORMAÇÕES DO VÍDEO
     # ══════════════════════════════════════════════════════════════
 
     def _get_video_info(self, video_path: Path) -> Dict:
-        """Obtém info do vídeo. CORRIGIDO: usa -show_entries corretos."""
         if not video_path.exists():
             raise FileNotFoundError(f"Arquivo não encontrado: {video_path}")
         if video_path.stat().st_size == 0:
             raise ValueError(f"Arquivo vazio: {video_path}")
 
-        # Comando corrigido: inclui codec_type no primeiro show_entries
         cmd = [
-            "ffprobe",
-            "-v",
-            "error",
-            "-show_entries",
-            "stream=width,height,codec_type,r_frame_rate",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "json",
-            str(video_path),
+            "ffprobe", "-v", "error",
+            "-show_entries", "stream=width,height,codec_type,r_frame_rate",
+            "-show_entries", "format=duration",
+            "-of", "json", str(video_path),
         ]
 
         try:
-            result = subprocess.run(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=True,
-            )
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
             data = json.loads(result.stdout)
 
-            # Procura stream de vídeo corretamente
             video_stream = None
             for stream in data.get("streams", []):
                 if stream.get("codec_type") == "video":
@@ -101,27 +88,17 @@ class VideoSplitterFast:
                 except:
                     fps = 30.0
             else:
-                # Fallback ffmpeg
                 w, h, fps = self._get_info_ffmpeg(video_path)
 
             duration = float(data.get("format", {}).get("duration", 0))
-
-            # Validação: se ainda é 0x0, tenta ffmpeg direto
-            if w == 0 or h == 0:
-                w, h, fps = self._get_info_ffmpeg(video_path)
-
             return {"width": w, "height": h, "duration": duration, "fps": fps}
-
         except Exception:
             w, h, fps = self._get_info_ffmpeg(video_path)
             return {"width": w, "height": h, "duration": 0, "fps": fps}
 
     def _get_info_ffmpeg(self, video_path: Path) -> tuple:
-        """Obtém width, height, fps via ffmpeg stderr."""
         cmd = ["ffmpeg", "-i", str(video_path), "-f", "null", "-"]
-        result = subprocess.run(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-        )
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         stderr = result.stderr
 
         match_res = re.search(r"(\d{2,4})x(\d{2,4})", stderr)
@@ -139,7 +116,7 @@ class VideoSplitterFast:
 
     def _calculate_crop(self, width: int, height: int) -> Tuple[int, int, int, int]:
         if self.output_format == "9:16":
-            crop_w = int(height * 9 / 16)
+            crop_w = int(height * 9 / 16 * self.zoom_factor)
             crop_h = height
             x = (width - crop_w) // 2
             return (max(0, x), 0, min(crop_w, width), crop_h)
@@ -150,61 +127,34 @@ class VideoSplitterFast:
             return (0, max(0, y), crop_w, min(crop_h, height))
 
     def _build_filter_string(self, crop_x, crop_y, crop_w, crop_h) -> str:
-        scale_w = (
-            self.target_width if self.output_format == "9:16" else self.landscape_width
-        )
-        scale_h = (
-            self.target_height
-            if self.output_format == "9:16"
-            else self.landscape_height
-        )
+        scale_w = self.target_width if self.output_format == "9:16" else self.landscape_width
+        scale_h = self.target_height if self.output_format == "9:16" else self.landscape_height
         return f"crop={crop_w}:{crop_h}:{crop_x}:{crop_y},scale={scale_w}:{scale_h}"
 
     def _build_ffmpeg_command(
-        self,
-        input_path,
-        output_path,
-        start_seconds,
-        duration,
-        apply_transform=False,
-        width=0,
-        height=0,
+        self, input_path, output_path, start_seconds, duration, apply_transform=False, width=0, height=0
     ) -> List[str]:
         cmd = [
             "ffmpeg",
-            "-ss",
-            str(start_seconds),
-            "-i",
-            str(input_path),
-            "-t",
-            str(duration),
+            "-ss", str(start_seconds),
+            "-i", str(input_path),
+            "-t", str(duration),
         ]
 
         if apply_transform:
             cx, cy, cw, ch = self._calculate_crop(width, height)
             filter_str = self._build_filter_string(cx, cy, cw, ch)
-            cmd.extend(
-                [
-                    "-vf",
-                    filter_str,
-                    "-c:v",
-                    "libx264",
-                    "-preset",
-                    self.PRESET,
-                    "-crf",
-                    str(self.CRF_DEFAULT),
-                    "-pix_fmt",
-                    "yuv420p",
-                    "-c:a",
-                    "aac",
-                    "-b:a",
-                    "128k",
-                    "-movflags",
-                    "+faststart",
-                    "-threads",
-                    str(self.num_threads),
-                ]
-            )
+            cmd.extend([
+                "-vf", filter_str,
+                "-c:v", "libx264",
+                "-preset", self.PRESET,
+                "-crf", str(self.CRF_DEFAULT),
+                "-pix_fmt", "yuv420p",
+                "-c:a", "aac",
+                "-b:a", "128k",
+                "-movflags", "+faststart",
+                "-threads", str(self.num_threads),
+            ])
         else:
             cmd.extend(["-c", "copy", "-avoid_negative_ts", "make_zero"])
 
@@ -212,51 +162,24 @@ class VideoSplitterFast:
         return cmd
 
     def _execute_cut(
-        self,
-        input_path,
-        output_path,
-        start_seconds,
-        end_seconds,
-        video_info,
-        apply_transform,
+        self, input_path, output_path, start_seconds, end_seconds, video_info, apply_transform
     ) -> Optional[Dict]:
         duration = end_seconds - start_seconds
         width, height = video_info["width"], video_info["height"]
 
-        # Se width/height é 0, tenta obter info do arquivo de saída
         if width == 0 or height == 0:
             info = self._get_video_info(input_path)
             width, height = info["width"], info["height"]
 
         command = self._build_ffmpeg_command(
-            input_path,
-            output_path,
-            start_seconds,
-            duration,
-            apply_transform,
-            width,
-            height,
+            input_path, output_path, start_seconds, duration, apply_transform, width, height
         )
 
         try:
-            subprocess.run(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=True,
-            )
+            subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
             if output_path.exists() and output_path.stat().st_size > 0:
-                final_w = (
-                    self.target_width
-                    if apply_transform and self.output_format == "9:16"
-                    else width
-                )
-                final_h = (
-                    self.target_height
-                    if apply_transform and self.output_format == "9:16"
-                    else height
-                )
+                final_w = self.target_width if apply_transform and self.output_format == "9:16" else width
+                final_h = self.target_height if apply_transform and self.output_format == "9:16" else height
                 return {
                     "start": round(start_seconds, 2),
                     "end": round(end_seconds, 2),
@@ -267,27 +190,15 @@ class VideoSplitterFast:
             return None
         except subprocess.CalledProcessError:
             if apply_transform:
-                return self._execute_cut(
-                    input_path,
-                    output_path,
-                    start_seconds,
-                    end_seconds,
-                    video_info,
-                    False,
-                )
+                return self._execute_cut(input_path, output_path, start_seconds, end_seconds, video_info, False)
             return None
 
     # ══════════════════════════════════════════════════════════════
-    #  CORTE EM CLIPES
+    #  CORTE EM CLIPES BRUTOS (FALCON SPEED)
     # ══════════════════════════════════════════════════════════════
 
     def split_all_clips(
-        self,
-        video_path,
-        clip_duration=60,
-        num_clips=None,
-        start_offset=0,
-        apply_transform=True,
+        self, video_path, clip_duration=60, num_clips=None, start_offset=0, apply_transform=True
     ) -> List[Dict]:
         input_path = Path(video_path)
         if not input_path.exists():
@@ -311,9 +222,12 @@ class VideoSplitterFast:
             total_cut = duration
 
         print(f"\n📹 {input_path.name} | {width}x{height} | {duration:.1f}s")
-        print(
-            f"✂️  {max_clips} clipe(s) de {clip_duration}s | 9:16: {'Sim' if apply_transform else 'Não'}"
-        )
+        
+        current_transform = apply_transform 
+        if os.environ.get("PIPELINE_MODO") == "2":
+            current_transform = False
+
+        print(f"✂️  {max_clips} clipe(s) de {clip_duration}s | Renderização 9:16 imediata: {'Sim' if current_transform else 'Não (Adiada para Concatenação)'}")
         print("-" * 60)
 
         base_name = input_path.stem
@@ -325,44 +239,38 @@ class VideoSplitterFast:
             current_end = min(current_start + clip_duration, total_cut)
             if current_end - current_start < 3:
                 break
-            cortes.append(
-                {
-                    "index": i,
-                    "start": current_start,
-                    "end": current_end,
-                    "output_path": self.base_dir
-                    / f"{base_name}_clip_{i:04d}{extension}",
-                    "output_name": f"{base_name}_clip_{i:04d}{extension}",
-                }
-            )
+            cortes.append({
+                "index": i,
+                "start": current_start,
+                "end": current_end,
+                "output_path": self.base_dir / f"{base_name}_clip_{i:04d}{extension}",
+                "output_name": f"{base_name}_clip_{i:04d}{extension}",
+            })
             current_start = current_end
 
         results = []
-        for c in cortes:
-            print(
-                f"🎬 Clip {c['index']:03d}: {c['start']:.1f}s → {c['end']:.1f}s",
-                end=" ",
-            )
-            r = self._execute_cut(
-                input_path,
-                c["output_path"],
-                c["start"],
-                c["end"],
-                video_info,
-                apply_transform,
-            )
-            if r:
-                r.update(
-                    {
+        
+        with ThreadPoolExecutor(max_workers=min(4, len(cortes))) as executor:
+            futures = {}
+            for c in cortes:
+                f = executor.submit(
+                    self._execute_cut, input_path, c["output_path"], c["start"], c["end"], video_info, current_transform
+                )
+                futures[f] = c
+
+            for f in as_completed(futures):
+                c = futures[f]
+                r = f.result()
+                if r:
+                    r.update({
                         "clip_id": c["index"],
                         "filename": c["output_name"],
                         "path": str(c["output_path"]),
-                    }
-                )
-                results.append(r)
-                print(f"✅ {r['size_mb']:.1f} MB")
-            else:
-                print("❌ Falha")
+                    })
+                    results.append(r)
+                    print(f"✅ Clip {c['index']:03d} extraído com sucesso ({r['size_mb']:.1f} MB)")
+                else:
+                    print(f"❌ Falha no Clip {c['index']:03d}")
 
         results.sort(key=lambda x: x.get("clip_id", 0))
 
@@ -370,134 +278,88 @@ class VideoSplitterFast:
         with open(metadata_path, "w", encoding="utf-8") as f:
             json.dump(results, f, ensure_ascii=False, indent=2)
 
-        print(f"\n✅ {len(results)} clipes | 💾 {metadata_path}")
+        print(f"\n✅ {len(results)} clipes salvos em metadata | 💾 {metadata_path}")
         return results
 
     # ══════════════════════════════════════════════════════════════
-    #  GANCHO (HOOK)
+    #  NOVA LÓGICA DE GANCHO (DENTRO DOS CLIPES CURTOS)
     # ══════════════════════════════════════════════════════════════
 
-    def extract_hook(
-        self, video_path, moment_duration=8, apply_transform=True
-    ) -> Optional[Dict]:
-        """Extrai gancho do vídeo (IA ou fallback do meio)."""
-        input_path = Path(video_path)
-        if not input_path.exists():
-            print(f"❌ Arquivo não encontrado: {video_path}")
+    async def extract_hook_from_clips_json(self, clips_json_path: str, moment_duration=8) -> Optional[Dict]:
+        """
+        🧠 ESTRATÉGIA DE VELOCIDADE BRUTA:
+        Lê os clipes já cortados e chama o BrainSelector para analisar 
+        o primeiro clipe curto gerado. Retorna onde o gancho ideal deve começar.
+        """
+        json_path = Path(clips_json_path)
+        if not json_path.exists():
             return None
 
+        with open(json_path, "r", encoding="utf-8") as f:
+            clipes = json.load(f)
+
+        if not clipes or not HAS_BRAIN_SELECTOR:
+            print("⚠️ Sem clipes ou BrainSelector indisponível. Usando fallback no meio.")
+            return {"hook_start": 0, "hook_end": moment_duration}
+
+        print("\n🧠 Analisando os clipes cortados com IA para criar o Gancho Ideal...")
+        
+        # Joga o JSON dos clipes enxutos diretamente para o BrainSelector processar em milissegundos
+        selector = BrainSelector()
         try:
-            video_info = self._get_video_info(input_path)
-        except Exception as e:
-            print(f"❌ Erro: {e}")
-            return None
+            selecionados = await selector.select_best_clips(str(json_path))
+        except RuntimeError:
+            import asyncio
+            selecionados = asyncio.run(selector.select_best_clips(str(json_path)))
 
-        duration = video_info["duration"]
-        hook_start = duration * 0.3  # fallback: 30% do vídeo
-        hook_end = min(hook_start + moment_duration, duration)
+        # Fallback padrão seguro: Começo do primeiro clipe
+        hook_start = 0
+        target_clip_path = Path(clipes[0]["path"])
 
-        print(f"\n🎯 GANCHO: Buscando melhor momento de {moment_duration}s...")
-
-        # Tenta IA
-        if HAS_BRAIN_SELECTOR and duration > 60:
-            analysis_duration = min(300, duration)
-
-            temp_clip = self.base_dir / f"{input_path.stem}_hook_analysis.mp4"
-            r = self._execute_cut(
-                input_path, temp_clip, 0, analysis_duration, video_info, False
-            )
-
-            if r and temp_clip.exists():
-                temp_json = self.base_dir / f"{input_path.stem}_hook_analysis.json"
-                temp_data = [
-                    {
-                        "clip_id": 1,
-                        "filename": temp_clip.name,
-                        "path": str(temp_clip),
-                        "start": 0,
-                        "end": analysis_duration,
-                        "duration": analysis_duration,
-                    }
-                ]
-                with open(temp_json, "w") as f:
-                    json.dump(temp_data, f)
-
-                print("🧠 Analisando com IA...")
-                import asyncio
-
-                selector = BrainSelector()
-
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    selecionados = loop.run_until_complete(
-                        selector.select_best_clips(str(temp_json))
-                    )
-                finally:
-                    loop.close()
-
-                # Limpa temporários
-                for f in [temp_clip, temp_json]:
-                    try:
-                        os.remove(f)
-                    except:
-                        pass
-
-                if selecionados and selecionados[0].get("moments"):
-                    moment = selecionados[0]["moments"][0]
-                    # Só usa se NÃO for o início (evita duplicar com clipes)
-                    if moment.get("start", 0) > 10:
-                        hook_start = moment["start"]
-                        hook_end = min(hook_start + moment_duration, duration)
-                        print(f"   🎯 IA: {hook_start:.1f}s → {hook_end:.1f}s")
-                    else:
-                        print(f"   ⚠️  IA retornou início, usando fallback (meio)")
-                else:
-                    print(f"   ⚠️  IA sem resultados, usando fallback (meio)")
+        # Se a IA encontrou um momento impactante em algum clipe, ele vira o nosso gancho!
+        if selecionados and selecionados[0].get("moments"):
+            best_clip = selecionados[0]
+            target_clip_path = Path(best_clip["path"])
+            moment = best_clip["moments"][0]
+            hook_start = moment["start"]
+            print(f"   🎯 IA detectou gancho ideal no arquivo {target_clip_path.name} em: {hook_start:.1f}s")
         else:
-            print(f"   ⚠️  Sem IA, usando fallback (meio do vídeo)")
+            print(f"   ⚠️ IA sem resultados nos clipes, aplicando gancho fixo no início do clip_0001.")
 
-        print(f"   📍 Corte: {hook_start:.1f}s → {hook_end:.1f}s")
+        # Corta o pedaço de 8 segundos do próprio clipe menor em vez de mexer no vídeo bruto original!
+        output_path = self.base_dir / f"{target_clip_path.stem}_hook{target_clip_path.suffix}"
+        
+        # Info do clipe curto
+        clip_info = self._get_video_info(target_clip_path)
+        hook_end = min(hook_start + moment_duration, clip_info["duration"])
 
-        output_path = self.base_dir / f"{input_path.stem}_hook{input_path.suffix}"
-        result = self._execute_cut(
-            input_path, output_path, hook_start, hook_end, video_info, apply_transform
-        )
+        result = self._execute_cut(target_clip_path, output_path, hook_start, hook_end, clip_info, apply_transform=False)
 
         if result:
-            result.update(
-                {
-                    "type": "hook",
-                    "path": str(output_path),
-                    "filename": output_path.name,
-                    "hook_start": hook_start,
-                    "hook_end": hook_end,
-                }
-            )
-            print(f"✅ Gancho: {output_path.name} ({result['size_mb']:.1f} MB)")
+            result.update({
+                "type": "hook",
+                "path": str(output_path),
+                "filename": output_path.name,
+                "hook_start": hook_start,
+                "hook_end": hook_end,
+            })
+            print(f"✅ Gancho extraído do clipe reduzido: {output_path.name} ({result['size_mb']:.1f} MB)")
             return result
 
         return None
 
     # ══════════════════════════════════════════════════════════════
-    #  CONCATENAÇÃO (CORRIGIDA)
+    #  CONCATENAÇÃO
     # ══════════════════════════════════════════════════════════════
 
     def prepend_hook_to_clips(
         self, hook_path: str, clips_json_path: str, output_dir: Optional[Path] = None
     ) -> List[Dict]:
-        """
-        Adiciona gancho ANTES de cada clipe com re-encode.
-        CORRIGIDO: Verifica resolução do gancho corretamente.
-        """
         hook = Path(hook_path)
         json_path = Path(clips_json_path)
 
-        if not hook.exists():
-            print(f"❌ Gancho não encontrado: {hook_path}")
-            return []
-        if not json_path.exists():
-            print(f"❌ JSON não encontrado: {clips_json_path}")
+        if not hook.exists() or not json_path.exists():
+            print("❌ Arquivos de entrada faltando para a concatenação.")
             return []
 
         with open(json_path, "r", encoding="utf-8") as f:
@@ -506,35 +368,38 @@ class VideoSplitterFast:
         output_dir = Path(output_dir) if output_dir else json_path.parent
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Info do gancho
         hook_info = self._get_video_info(hook)
         hook_w = hook_info.get("width", self.target_width)
         hook_h = hook_info.get("height", self.target_height)
 
-        print(f"\n🔗 ADICIONANDO GANCHO ({hook_w}x{hook_h})")
-        print(f"   Clipes: {len(clipes)}")
+        print(f"\n🔗 UNIFICANDO GANCHOS + CLIPES EM PARALELO (Aplicando Crop 9:16 único)")
         print("-" * 60)
 
         novos_clipes = []
-        files_to_remove = []
+        files_to_remove = [hook, json_path]
 
-        for i, clipe in enumerate(clipes, 1):
-            clip_path = Path(clipe["path"])
-            if not clip_path.exists():
-                continue
+        with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+            futures = {}
+            for clipe in clipes:
+                clip_path = Path(clipe["path"])
+                if not clip_path.exists() or "hook" in clip_path.name:
+                    continue
 
-            output_path = output_dir / f"{clip_path.stem}_final{clip_path.suffix}"
-            print(f"   🎬 {i}/{len(clipes)}: {output_path.name}", end=" ")
+                output_path = output_dir / f"{clip_path.stem}_final{clip_path.suffix}"
+                files_to_remove.append(clip_path)
 
-            # Concatena com re-encode
-            success = self._concat_two_videos(
-                hook, clip_path, output_path, hook_w, hook_h
-            )
+                f = executor.submit(
+                    self._concat_two_videos, hook, clip_path, output_path, hook_w, hook_h
+                )
+                futures[f] = (clipe, output_path)
 
-            if success:
-                novos_clipes.append(
-                    {
-                        "clip_id": i,
+            for f in as_completed(futures):
+                clipe, output_path = futures[f]
+                success = f.result()
+
+                if success:
+                    novos_clipes.append({
+                        "clip_id": clipe.get("clip_id"),
                         "filename": output_path.name,
                         "path": str(output_path),
                         "start": clipe.get("start", 0),
@@ -542,48 +407,31 @@ class VideoSplitterFast:
                         "duration": clipe.get("duration", 0),
                         "size_mb": round(output_path.stat().st_size / (1024 * 1024), 2),
                         "has_hook": True,
-                    }
-                )
-                files_to_remove.append(clip_path)
-                print(f"✅ {novos_clipes[-1]['size_mb']:.1f} MB")
-            else:
-                novos_clipes.append({**clipe, "has_hook": False})
-                print("⚠️  Fallback (original mantido)")
+                    })
+                    print(f"✅ Vídeo Final Combinado Criado: {output_path.name} ({novos_clipes[-1]['size_mb']:.1f} MB)")
+                else:
+                    print(f"⚠️ Erro ao processar combinação para o arquivo {output_path.name}")
 
-        # Remove originais
-        files_to_remove.append(hook)
-        files_to_remove.append(json_path)
         for f in files_to_remove:
             try:
-                if f.exists():
-                    os.remove(f)
-            except Exception:
-                pass
+                if f.exists(): f.unlink()
+            except: pass
 
-        print(f"\n🗑️  {len(files_to_remove)} arquivos removidos")
-
-        # Salva JSON final
-        base_name = json_path.stem.replace("_clipes", "")
+        novos_clipes.sort(key=lambda x: x.get("clip_id", 0))
+        base_name = json_path.name.replace("_clipes.json", "")
         final_json = output_dir / f"{base_name}_final.json"
+        
         with open(final_json, "w", encoding="utf-8") as f:
             json.dump(novos_clipes, f, ensure_ascii=False, indent=2)
 
-        print(f"✅ {len(novos_clipes)} clipes finais | 💾 {final_json}")
         return novos_clipes
 
-    def _concat_two_videos(
-        self, video1: Path, video2: Path, output: Path, width: int, height: int
-    ) -> bool:
-        """
-        Concatena 2 vídeos com re-encode para unificar formato.
-        """
-        # Lista de concatenação
-        concat_list = self.base_dir / "_concat_temp.txt"
+    def _concat_two_videos(self, video1: Path, video2: Path, output: Path, width: int, height: int) -> bool:
+        concat_list = self.base_dir / f"_concat_{output.stem}.txt"
         with open(concat_list, "w") as f:
             f.write(f"file '{video1.absolute()}'\n")
             f.write(f"file '{video2.absolute()}'\n")
 
-        # Filtro para garantir 9:16
         if self.output_format == "9:16" and width > 0 and height > 0:
             cx, cy, cw, ch = self._calculate_crop(width, height)
             vf = self._build_filter_string(cx, cy, cw, ch)
@@ -592,60 +440,38 @@ class VideoSplitterFast:
 
         command = [
             "ffmpeg",
-            "-f",
-            "concat",
-            "-safe",
-            "0",
-            "-i",
-            str(concat_list),
-            "-vf",
-            vf,
-            "-c:v",
-            "libx264",
-            "-preset",
-            self.PRESET,
-            "-crf",
-            str(self.CRF_DEFAULT),
-            "-pix_fmt",
-            "yuv420p",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "128k",
-            "-movflags",
-            "+faststart",
-            "-threads",
-            str(self.num_threads),
-            "-y",
-            str(output),
+            "-f", "concat",
+            "-safe", "0",
+            "-i", str(concat_list),
+            "-vf", vf,
+            "-c:v", "libx264",
+            "-preset", self.PRESET,
+            "-crf", str(self.CRF_DEFAULT),
+            "-pix_fmt", "yuv420p",
+            "-c:a", "aac",
+            "-b:a", "128k",
+            "-movflags", "+faststart",
+            "-threads", "2",
+            "-y", str(output),
         ]
 
         try:
-            subprocess.run(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=True,
-            )
+            subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
             concat_list.unlink(missing_ok=True)
             return output.exists() and output.stat().st_size > 0
-        except subprocess.CalledProcessError as e:
-            print(f"\n❌ FFmpeg: {e.stderr[-300:]}")
+        except subprocess.CalledProcessError:
             concat_list.unlink(missing_ok=True)
             return False
 
 
 if __name__ == "__main__":
-    import sys
-
     print("=" * 60)
-    print("🎬 VIDEO SPLITTER FAST - TESTE")
+    print("🎬 VIDEO SPLITTER ULTRA FAST - CORTES INTELIGENTES")
     print("=" * 60)
 
     print("\n📋 Modos:")
     print("   1. Cortar vídeo em clipes")
-    print("   2. Pipeline completo (clipes + gancho)")
+    print("   2. Pipeline completo de alta velocidade (clipes -> gancho via IA)")
 
     modo = input("\n🔢 Escolha: ").strip() or "1"
     video_path = input("📹 Vídeo: ").strip()
@@ -654,39 +480,46 @@ if __name__ == "__main__":
         print("❌ Caminho obrigatório")
         sys.exit(1)
 
+    os.environ["PIPELINE_MODO"] = modo
+
     splitter = VideoSplitterFast(
         base_dir=ROOT_DIR / "processed_videos" / "raw_clips",
         output_format="9:16",
-        num_threads=2,
+        num_threads=4,
+        zoom_factor=1.15,
     )
 
     if modo == "2":
         num = int(input("✂️  Quantos clipes? (3): ").strip() or "3")
         dur = int(input("⏱️  Duração por clipe (90s): ").strip() or "90")
 
-        hook = splitter.extract_hook(
-            video_path=video_path, moment_duration=8, apply_transform=True
-        )
-
-        start_offset = hook.get("hook_end", 30) if hook else 30
-
+        # PASSO 1: Fazer os cortes brutos super rápidos primeiro
         clips = splitter.split_all_clips(
             video_path=video_path,
             clip_duration=dur,
             num_clips=num,
-            start_offset=start_offset,
+            start_offset=0,
             apply_transform=True,
         )
 
-        if clips and hook:
+        if clips:
             clipes_json = splitter.base_dir / f"{Path(video_path).stem}_clipes.json"
-            final = splitter.prepend_hook_to_clips(
-                hook_path=hook["path"],
-                clips_json_path=str(clipes_json),
-            )
-            print(f"\n✅ {len(final)} clipes finais com gancho!")
+            
+            # PASSO 2: Extrair o gancho de forma inteligente a partir do clipe gerado
+            import asyncio
+            hook = asyncio.run(splitter.extract_hook_from_clips_json(clips_json_path=str(clipes_json), moment_duration=8))
+            
+            if hook:
+                # PASSO 3: Unificar com re-encode único em paralelo
+                final = splitter.prepend_hook_to_clips(
+                    hook_path=hook["path"],
+                    clips_json_path=str(clipes_json),
+                )
+                print(f"\n🚀 SUCESSO EM TEMPO RECORDE! {len(final)} clipes unificados com ganchos!")
+            else:
+                print(f"\n✅ Clipes gerados com sucesso, gancho ignorado.")
         else:
-            print(f"\n✅ {len(clips)} clipes (sem gancho)")
+            print("❌ Falha na geração dos clipes base.")
     else:
         num = int(input("✂️  Quantos clipes? (3): ").strip() or "3")
         dur = int(input("⏱️  Duração (90s): ").strip() or "90")
@@ -697,4 +530,4 @@ if __name__ == "__main__":
             num_clips=num,
             apply_transform=True,
         )
-        print(f"\n✅ {len(resultados)} clipe(s)")
+        print(f"\n✅ {len(resultados)} clipe(s) gerado(s)")
